@@ -39,15 +39,26 @@ Then open:
 | Page | URL | Access |
 |---|---|---|
 | Public site | http://127.0.0.1:5000 | Everyone |
-| Admin | http://127.0.0.1:5000/admin | Password-protected |
+| Admin | http://127.0.0.1:5000/admin | Password from `.env` |
 
-The default admin password is `lokamania-admin`. Change it before anything public:
+## Admin password (`.env`)
+
+The admin password lives in the **`.env`** file in the project root (already created for you).
+The server loads it automatically on startup, and it is **ignored by git** — never commit it.
+
+Change it by editing `.env`, or as an environment variable (env vars always win over `.env`):
 
 ```bash
-ADMIN_PASSWORD="pick-a-strong-password" ./server/run.sh
+ADMIN_PASSWORD="your-strong-password" ./server/run.sh
 ```
 
-Other options: `EXCEL_PATH` (path to the workbook), `PORT` (default 5000), `SECRET_KEY`.
+Supported values in `.env`: `ADMIN_PASSWORD`, `EXCEL_PATH` (path to the workbook), `PORT`.
+
+## Admin security
+
+- The admin page authenticates with a **short-lived token kept in memory only** — a page refresh
+  or a server restart signs you out automatically, so you must enter the password again. This is
+  intentional: it helps if the admin page is left open on a shared machine.
 
 ## Files
 

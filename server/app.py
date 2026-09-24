@@ -14,11 +14,13 @@ from __future__ import annotations
 
 import os
 import re
+import secrets
+import time
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-from flask import Flask, abort, jsonify, request, send_from_directory, session
+from flask import Flask, abort, jsonify, request, send_from_directory
 
 from excel_db import ExcelDatabase, ExcelWriteRefused
 
@@ -27,14 +29,37 @@ DEFAULT_EXCEL = (
     "/Users/macbookair/Library/CloudStorage/OneDrive-Personal/"
     "Lokamania Website/Lokamania_09_Brand_Applications_FINAL.xlsx"
 )
+def _load_env(path):
+    """Tiny dependency-free .env loader. Real env vars always win."""
+    path = Path(path)
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key, value = key.strip(), value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_env(PROJECT_ROOT / ".env")
+
 EXCEL_PATH = os.environ.get("EXCEL_PATH", DEFAULT_EXCEL)
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "lokamania-admin")
-SECRET_KEY = os.environ.get("SECRET_KEY", "lokamania-09-dev-secret")
 PORT = int(os.environ.get("PORT", "5000"))
 
 db = ExcelDatabase(EXCEL_PATH)
 app = Flask(__name__, static_folder=None)
-app.secret_key = SECRET_KEY
+
+# Admin authentication uses short-lived bearer tokens kept in memory.
+# There is no persistent cookie: as soon as the page is refreshed or the
+# server restarts the token is gone, so the admin user must sign in again.
+TOKEN_TTL_SECONDS = 60 * 60  # sliding 1-hour expiry
+ADMIN_TOKENS = {}            # token -> absolute expiry (time.monotonic)
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -211,22 +236,33 @@ def create_application():
 
 
 def require_admin():
-    if not session.get("admin"):
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else ""
+    expiry = ADMIN_TOKENS.get(token)
+    now = time.monotonic()
+    if expiry is None:
         abort(401)
+    if now > expiry:
+        ADMIN_TOKENS.pop(token, None)
+        abort(401)
+    ADMIN_TOKENS[token] = now + TOKEN_TTL_SECONDS  # sliding expiry
 
 
 @app.post("/api/auth/login")
 def login():
     payload = request.get_json(silent=True) or {}
-    if payload.get("password") == ADMIN_PASSWORD:
-        session["admin"] = True
-        return jsonify(ok=True)
-    return jsonify(ok=False, error="Wrong password"), 401
+    if payload.get("password") != ADMIN_PASSWORD:
+        return jsonify(ok=False, error="Wrong password"), 401
+    token = secrets.token_urlsafe(32)
+    ADMIN_TOKENS[token] = time.monotonic() + TOKEN_TTL_SECONDS
+    return jsonify(ok=True, token=token)
 
 
 @app.post("/api/auth/logout")
 def logout():
-    session.clear()
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else ""
+    ADMIN_TOKENS.pop(token, None)
     return jsonify(ok=True)
 
 
