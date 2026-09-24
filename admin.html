@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lokamania 09 — Admin</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23030b20'/%3E%3Cpath d='M13 12h12v29h26v11H13z' fill='%237cc8ff'/%3E%3C/svg%3E">
+<style>
+:root{--ink:#020817;--navy:#071834;--blue:#1264f2;--ice:#9bdcff;--white:#f8fbff;--muted:#b8c9df;--line:rgba(142,203,255,.28);--panel:rgba(10,29,61,.82)}
+*{box-sizing:border-box}body{margin:0;background:var(--ink);color:var(--white);font-family:Inter,Arial,sans-serif;line-height:1.5}button,input,select,textarea{font:inherit}
+.wrap{width:min(1200px,calc(100% - 32px));margin:auto}
+header{background:var(--navy);border-bottom:1px solid var(--line);padding:16px 0;margin-bottom:28px}
+.head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+h1{font-size:1.35rem;margin:0;letter-spacing:-.02em} h1 small{color:var(--muted);font-weight:600;font-size:.85rem}
+button{cursor:pointer;border:1px solid #67baff;background:linear-gradient(135deg,#074ee8,#38a8ff);color:#fff;font-weight:800;padding:10px 16px;border-radius:8px;transition:.15s}
+button:hover{filter:brightness(1.08)} button.ghost{background:rgba(255,255,255,.07);border-color:var(--line)} button.danger{background:rgba(255,80,80,.15);border-color:#ff5f5f;color:#ffb3b3}
+.hidden{display:none!important}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:20px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
+.stat{background:linear-gradient(145deg,rgba(16,54,110,.8),rgba(8,24,53,.92));border:1px solid var(--line);border-radius:10px;padding:14px}
+.stat b{display:block;color:var(--ice);font-size:1.6rem;line-height:1} .stat span{font-size:.8rem;color:var(--muted);font-weight:700}
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+input[type=text],select{background:#0a1d3d;color:var(--white);border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-height:42px}
+input[type=password]{background:#0a1d3d;color:var(--white);border:1px solid var(--line);border-radius:8px;padding:12px;width:100%}
+#login{margin:80px auto;max-width:360px}
+.err{color:#ff8f8f;font-weight:700;margin:10px 0;min-height:1.2em}
+table{width:100%;border-collapse:collapse;font-size:.88rem}
+th{text-align:left;color:var(--ice);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:10px;border-bottom:1px solid rgba(142,203,255,.14);vertical-align:top}
+tr:hover td{background:rgba(18,100,242,.08)}
+td select{min-height:36px;padding:6px 8px;width:100%}
+td input[type=text]{min-height:36px;padding:6px 8px;width:100%}
+.ref{color:var(--ice);font-weight:800;white-space:nowrap}
+.brand{font-weight:800}
+.muted{color:var(--muted);font-size:.8rem}
+.pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.75rem;font-weight:800;border:1px solid var(--line);white-space:nowrap}
+footer{margin:26px 0 40px;color:var(--muted);font-size:.8rem;text-align:center}
+@media(max-width:720px){.wide{display:none}}
+</style>
+</head>
+<body>
+<header><div class="wrap head"><h1>Lokamania 09 <small>— Applications admin</small></h1><div><button id="logoutBtn" class="ghost hidden">Log out</button></div></div></header>
+
+<div class="wrap">
+  <!-- Login -->
+  <div id="login" class="card">
+    <h1>Admin login</h1>
+    <p class="muted">This page lets you review applications and update statuses. Everything you change is saved straight into the Excel workbook.</p>
+    <input type="password" id="password" placeholder="Password" autocomplete="current-password">
+    <div class="err" id="loginErr"></div>
+    <button id="loginBtn" style="width:100%">Sign in</button>
+  </div>
+
+  <!-- Dashboard -->
+  <div id="dash" class="hidden">
+    <div class="card">
+      <div class="stats" id="stats">
+        <div class="stat"><b>–</b><span>Total applications</span></div>
+        <div class="stat"><b>–</b><span>Accepted</span></div>
+        <div class="stat"><b>–</b><span>Payment pending</span></div>
+        <div class="stat"><b>–</b><span>New · awaiting review</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="filters">
+        <input type="text" id="search" placeholder="Search brand, contact, email, reference…">
+        <select id="filterStatus"><option value="all">All statuses</option></select>
+        <select id="filterPayment"><option value="all">All payments</option></select>
+        <button id="refreshBtn" class="ghost">Refresh</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <table>
+        <thead><tr>
+          <th>Reference</th><th>Submitted</th><th>Brand</th><th class="wide">Category</th><th class="wide">Days</th><th>Space</th>
+          <th>Status</th><th>Payment</th><th style="min-width:180px">Notes</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <p class="muted" id="empty" style="padding:18px 0 6px">No applications yet.</p>
+    </div>
+  </div>
+
+  <footer>Lokamania 09 · Winter Edition · 6–7 November 2026 · U Venues — data lives in the Lokamania Excel workbook.</footer>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+let statusOptions=[],paymentOptions=[];
+const loginBox=$('#login'),dash=$('#dash'),logoutBtn=$('#logoutBtn');
+
+async function api(url,method='GET',body){
+  const res=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+  let data={};try{data=await res.json()}catch(e){}
+  return {ok:res.ok,status:res.status,data};
+}
+
+async function loadData(){
+  const params=new URLSearchParams();
+  const st=$('#filterStatus').value,pm=$('#filterPayment').value,q=$('#search').value.trim();
+  if(st&&st!=='all')params.set('status',st);
+  if(pm&&pm!=='all')params.set('payment',pm);
+  if(q)params.set('q',q);
+  const r=await api('/api/applications?'+params.toString());
+  if(!r.ok)return false;
+  statusOptions=r.data.status_options;paymentOptions=r.data.payment_options;
+  renderFilters();renderRows(r.data.applications);
+  const s=await api('/api/stats');
+  if(s.ok&&s.data.stats)renderStats(s.data.stats);
+  return true;
+}
+
+function renderStats(st){
+  $('#stats').innerHTML=[
+    ['Total applications',st.total],['Accepted',st.accepted],['Payment pending',st.payment_pending],
+    ['New · awaiting review',st.by_status['New']||0]
+  ].map(([l,v])=>`<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('');
+}
+
+function renderFilters(){
+  const curSt=$('#filterStatus').value,curPm=$('#filterPayment').value;
+  $('#filterStatus').innerHTML='<option value="all">All statuses</option>'+statusOptions.map(s=>`<option>${s}</option>`).join('');
+  $('#filterPayment').innerHTML='<option value="all">All payments</option>'+paymentOptions.map(p=>`<option>${p}</option>`).join('');
+  $('#filterStatus').value=curSt;$('#filterPayment').value=curPm;
+}
+
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+function renderRows(apps){
+  const tbody=$('#rows');
+  $('#empty').classList.toggle('hidden',apps.length>0);
+  tbody.innerHTML=apps.map(a=>`<tr data-ref="${esc(a.reference)}">
+    <td><span class="ref">${esc(a.reference)}</span><br><span class="muted">${esc(a.email)}</span></td>
+    <td class="muted">${esc(String(a.submitted_at||'').replace('T',' '))}</td>
+    <td><span class="brand">${esc(a.brand)}</span><br><span class="muted">${esc(a.contact)} · ${esc(a.phone)}</span></td>
+    <td class="wide"><span class="pill">${esc(a.category)}</span>${a.subcategory?`<br><span class="muted">${esc(a.subcategory)}</span>`:''}</td>
+    <td class="wide">${esc(a.days)}</td>
+    <td>${esc(a.booth)}</td>
+    <td><select class="st" data-field="status">${statusOptions.map(s=>`<option ${s===a.status?'selected':''}>${esc(s)}</option>`).join('')}</select></td>
+    <td><select class="st" data-field="payment">${paymentOptions.map(p=>`<option ${p===a.payment?'selected':''}>${esc(p)}</option>`).join('')}</select></td>
+    <td><div style="display:flex;gap:6px"><input type="text" class="notes" value="${esc(a.notes||'')}" placeholder="Internal notes…"><button class="ghost save" data-field="notes" style="padding:6px 10px">Save</button></div></td>
+  </tr>`).join('');
+  tbody.querySelectorAll('.st').forEach(sel=>sel.onchange=async()=>await patchRow(sel.closest('tr'),{[sel.dataset.field]:sel.value}));
+  tbody.querySelectorAll('.save').forEach(btn=>btn.onclick=async()=>await patchRow(btn.closest('tr'),{notes:btn.closest('tr').querySelector('.notes').value}));
+}
+
+async function patchRow(tr,payload){
+  const ref=tr.dataset.ref,btn=tr.querySelector('.save');const orig=btn?btn.textContent:null;
+  if(btn){btn.disabled=true;btn.textContent='…'}
+  const r=await api('/api/applications/'+encodeURIComponent(ref),'PATCH',payload);
+  if(btn){btn.disabled=false;btn.textContent=orig||'Save'}
+  if(!r.ok){alert('Failed to save: '+(r.data.error||'server error'));await loadData();return}
+  const st=await api('/api/stats');if(st.ok&&st.data.stats)renderStats(st.data.stats);
+}
+
+// auth
+async function init(){
+  const ok=await loadData();
+  if(ok){loginBox.classList.add('hidden');dash.classList.remove('hidden');logoutBtn.classList.remove('hidden');}
+  else{loginBox.classList.remove('hidden');dash.classList.add('hidden');logoutBtn.classList.add('hidden');}
+}
+$('#loginBtn').onclick=async()=>{
+  const r=await api('/api/auth/login','POST',{password:$('#password').value});
+  if(r.ok){$('#loginErr').textContent='';await init();$('#password').value='';}
+  else $('#loginErr').textContent=r.data.error||'Sign-in failed';
+};
+$('#password').addEventListener('keydown',e=>{if(e.key==='Enter')$('#loginBtn').click()});
+$('#logoutBtn').onclick=async()=>{await api('/api/auth/logout','POST');init()};
+$('#refreshBtn').onclick=loadData;
+loadData().then(()=>{
+  if($('#filterStatus').options.length<=1)return; // not authed yet
+});
+init();
+</script>
+</body>
+</html>
