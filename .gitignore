@@ -1,0 +1,34 @@
+# ---- macOS ----
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# ---- Python / virtualenv ----
+server/.venv/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# ---- Secrets & local config ----
+.env
+.env.local
+*.pem
+
+# ---- Excel / applicant data (never commit private data) ----
+*.xlsx
+*.xls
+*.xlsm
+~$*.xlsx          # Excel lock files (file open in Excel)
+*.tmp.xlsx        # atomic-save temp files created by the server
+backups/          # automatic workbook backups
+
+# ---- Logs & editor junk ----
+*.log
+server/*.log
+.idea/
+.vscode/
+*.swp
+*~
