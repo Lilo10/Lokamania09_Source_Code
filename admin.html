@@ -5,34 +5,34 @@
 <title>Lokamania 09 — Admin</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23030b20'/%3E%3Cpath d='M13 12h12v29h26v11H13z' fill='%237cc8ff'/%3E%3C/svg%3E">
 <style>
-:root{--ink:#020817;--navy:#071834;--blue:#1264f2;--ice:#9bdcff;--white:#f8fbff;--muted:#b8c9df;--line:rgba(142,203,255,.28);--panel:rgba(10,29,61,.82)}
+:root{--ink:#03131a;--navy:#0a2733;--blue:#2fa9b8;--ice:#a8e4e8;--white:#f8fbff;--muted:#a4bec7;--line:rgba(128,192,192,.28);--panel:rgba(9,32,44,.85)}
 *{box-sizing:border-box}html,body{margin:0}body{background:var(--ink);color:var(--white);font-family:Inter,Arial,sans-serif;line-height:1.5;min-height:100vh}button,input,select,textarea{font:inherit}
 /* Fluid layout: stretches to the window and reflows to any window size */
 .wrap{width:calc(100% - 28px);max-width:1920px;margin:auto;padding-bottom:48px}
-header{position:sticky;top:0;z-index:20;background:rgba(2,8,23,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:14px 0;margin-bottom:22px}
+header{position:sticky;top:0;z-index:20;background:rgba(2,16,22,.9);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:14px 0;margin-bottom:22px}
 .head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
 h1{font-size:1.3rem;margin:0;letter-spacing:-.02em}h1 small{color:var(--muted);font-weight:600;font-size:.85rem}
 .head-actions{display:flex;gap:10px;flex-wrap:wrap}
-button{cursor:pointer;border:1px solid #67baff;background:linear-gradient(135deg,#074ee8,#38a8ff);color:#fff;font-weight:800;padding:10px 16px;border-radius:8px;transition:.15s}
+button{cursor:pointer;border:1px solid #5fc9d4;background:linear-gradient(135deg,#0e7d8c,#39b8c8);color:#fff;font-weight:800;padding:10px 16px;border-radius:8px;transition:.15s}
 button:hover{filter:brightness(1.1)}button.ghost{background:rgba(255,255,255,.07);border-color:var(--line)}button.danger{background:rgba(255,80,80,.15);border-color:#ff5f5f;color:#ffb3b3}
 .hidden{display:none!important}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:20px}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-.stat{background:linear-gradient(145deg,rgba(16,54,110,.8),rgba(8,24,53,.92));border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.stat{background:linear-gradient(145deg,rgba(13,47,60,.8),rgba(7,26,34,.92));border:1px solid var(--line);border-radius:10px;padding:14px 16px}
 .stat b{display:block;color:var(--ice);font-size:1.7rem;line-height:1}.stat span{font-size:.8rem;color:var(--muted);font-weight:700}
 .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .filters .grow{flex:1 1 260px}
-input[type=text],select{background:#0a1d3d;color:var(--white);border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-height:42px}
-input[type=password]{background:#0a1d3d;color:var(--white);border:1px solid var(--line);border-radius:8px;padding:12px;width:100%}
+input[type=text],select{background:#0c2733;color:var(--white);border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-height:42px}
+input[type=password]{background:#0c2733;color:var(--white);border:1px solid var(--line);border-radius:8px;padding:12px;width:100%}
 #login{margin:10vh auto;max-width:380px}
 .err{color:#ff8f8f;font-weight:700;margin:10px 0;min-height:1.2em}
 /* Scrollable table area with a sticky header */
 .table-scroll{overflow:auto;max-height:calc(100vh - 300px)}
 table{width:100%;border-collapse:collapse;font-size:.88rem;min-width:980px}
-thead th{position:sticky;top:0;z-index:3;background:#0a1d3d}
+thead th{position:sticky;top:0;z-index:3;background:#0c2733}
 th{text-align:left;color:var(--ice);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;padding:10px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
-td{padding:10px;border-bottom:1px solid rgba(142,203,255,.14);vertical-align:top}
-tbody tr:hover td{background:rgba(18,100,242,.08)}
+td{padding:10px;border-bottom:1px solid rgba(128,192,192,.14);vertical-align:top}
+tbody tr:hover td{background:rgba(47,169,184,.08)}
 td select{min-height:36px;padding:6px 8px;width:100%}
 td input[type=text]{min-height:36px;padding:6px 8px;width:100%}
 .ref{color:var(--ice);font-weight:800;white-space:nowrap}
