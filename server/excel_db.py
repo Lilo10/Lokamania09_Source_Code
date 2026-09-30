@@ -73,6 +73,10 @@ class ExcelDatabase:
         self.backup_dir = Path(backup_dir or (self.path.parent / "backups"))
         self._lock = threading.Lock()
         self._backup_done = False
+        # Read-side cache: see _snapshot(). Dropped whenever the file changes
+        # on disk or we write to it ourselves.
+        self._cache = None
+        self._cache_stamp = None
 
     # --------------------------------------------------------------- loading
     def _load(self):
@@ -109,8 +113,7 @@ class ExcelDatabase:
 
     def settings(self):
         """Read the Settings sheet (single source of truth for options)."""
-        wb, _ = self._load()
-        return self._settings(wb)
+        return self._snapshot()["settings"]
 
     def _settings(self, wb):
         ws = wb[SETTINGS_SHEET]
@@ -196,6 +199,17 @@ class ExcelDatabase:
         self._backup_done = True
 
     def _check_open_in_excel(self):
+        """Refuse to write if a local copy of the file is open in Excel.
+
+        This only ever matters on a developer machine, where the workbook lives
+        in a synced folder (OneDrive/Dropbox) and can be open in Excel while the
+        server runs. Excel's lock file is named "~$" + filename in the same
+        folder; if it is there, saving would race Excel and could lose data, so
+        we bail out with a clear message.
+
+        On a real host (Railway) the workbook sits on a volume that Excel can
+        never open, so no lock file can exist and this check is a no-op.
+        """
         lock = self.path.parent / ("~$" + self.path.name)
         if lock.exists():
             raise ExcelWriteRefused(
@@ -215,6 +229,8 @@ class ExcelDatabase:
                     tmp.unlink()
                 except OSError:
                     pass
+        # The file on disk is now different, so the read cache must go.
+        self._invalidate_cache()
 
     @staticmethod
     def _expand_table(ws, last_data_row):
@@ -282,29 +298,152 @@ class ExcelDatabase:
             return True
 
     # -------------------------------------------------------------- read side
+    #
+    # Reading is the hot path: the admin page lists applications every 30 s and
+    # the dashboard asks for stats, so a full load_workbook() per request is far
+    # too slow. Two changes fix that:
+    #
+    #   1. read_only=True streams the sheet XML instead of building 30k+ cell
+    #      objects, and the reader stops at the first run of blank rows instead
+    #      of walking all 1000 pre-formatted ones.
+    #   2. The result is cached and only re-read when the file's mtime/size
+    #      changes, so a refresh that finds nothing new costs almost nothing.
+    #
+    # Writes still go through the normal load/save path, and the cache is
+    # dropped after every write so the next read sees the new data.
+    def _file_stamp(self):
+        try:
+            st = self.path.stat()
+            return (st.st_mtime_ns, st.st_size)
+        except OSError:
+            return None
+
+    def _stream_rows(self, ws, start_row, blank_run_to_stop=3):
+        """Yield (row_number, values) for filled rows, stopping at a blank run.
+
+        read_only worksheets do not support random cell access, so rows are
+        consumed in one forward pass.
+        """
+        blank = 0
+        for offset, values in enumerate(
+            ws.iter_rows(min_row=start_row, max_col=NUM_COLS, values_only=True)
+        ):
+            row_number = start_row + offset
+            if any(v is not None and str(v).strip() != "" for v in values):
+                yield row_number, values
+                blank = 0
+            else:
+                blank += 1
+                if blank >= blank_run_to_stop:
+                    return
+
+    @staticmethod
+    def _columns_from_header(header_values):
+        """Map python field key -> column index, from a streamed header row."""
+        cols = {}
+        for index, value in enumerate(header_values, start=1):
+            if value is None:
+                continue
+            key = FIELD_BY_HEADER.get(ExcelDatabase._norm(value))
+            if key:
+                cols[key] = index
+        return cols
+
+    def _read_settings_stream(self, wb):
+        ws = wb[SETTINGS_SHEET]
+        # The option lists are contiguous columns starting at the first data
+        # row, so collect them in a single pass.
+        collected = {}
+        for _row_number, values in self._stream_rows(ws, FIRST_DATA_ROW,
+                                                     blank_run_to_stop=2):
+            for index, value in enumerate(values, start=1):
+                if value is not None and str(value).strip() != "":
+                    collected.setdefault(index, []).append(str(value).strip())
+
+        def column(index):
+            return collected.get(index, [])
+
+        categories, spaces_by_category = [], {}
+        for offset, cat in enumerate(column(1)):
+            categories.append(cat)
+            spaces = column(2)[offset] if offset < len(column(2)) else None
+            spaces_by_category[cat] = (
+                [s.strip() for s in str(spaces).split(",") if s.strip()]
+                if spaces
+                else []
+            )
+        statuses = column(10)
+        payments = column(12)
+        return {
+            "categories": categories,
+            "spaces_by_category": spaces_by_category,
+            "days": column(4),
+            "registration": column(6),
+            "joined": column(8),
+            "statuses": statuses,
+            "payments": payments,
+            "default_status": statuses[0] if statuses else "New",
+            "default_payment": payments[0] if payments else "Not Requested",
+        }
+
+    def _snapshot(self):
+        """Cached (records, settings) pair, re-read only when the file changes."""
+        stamp = self._file_stamp()
+        if stamp is None:
+            raise FileNotFoundError(f"Workbook not found: {self.path}")
+
+        with self._lock:
+            if stamp == self._cache_stamp and self._cache is not None:
+                return self._cache
+
+            wb = openpyxl.load_workbook(self.path, read_only=True, data_only=True)
+            try:
+                header = next(
+                    wb[APP_SHEET].iter_rows(min_row=HEADER_ROW,
+                                            max_row=HEADER_ROW,
+                                            max_col=NUM_COLS,
+                                            values_only=True),
+                    (),
+                )
+                cols = self._columns_from_header(header)
+                records = []
+                for row_number, values in self._stream_rows(
+                    wb[APP_SHEET], FIRST_DATA_ROW
+                ):
+                    record = {key: values[col - 1] for key, col in cols.items()}
+                    for key, value in record.items():
+                        if isinstance(value, (dt.datetime, dt.date)):
+                            record[key] = value.isoformat(timespec="seconds")
+                    if not (record.get("reference") or record.get("brand")):
+                        continue
+                    record["row"] = row_number
+                    records.append(record)
+                records.sort(key=lambda r: r.get("submitted_at") or "",
+                             reverse=True)
+                snapshot = {
+                    "records": records,
+                    "settings": self._read_settings_stream(wb),
+                }
+            finally:
+                wb.close()
+
+            self._cache = snapshot
+            self._cache_stamp = stamp
+            return snapshot
+
+    def _invalidate_cache(self):
+        self._cache = None
+        self._cache_stamp = None
+
     def list_applications(self):
         """All application rows, newest first (no lock needed: read-only)."""
-        wb, ws = self._load()
-        cols = self._columns(ws)
-        records = []
-        for row in range(FIRST_DATA_ROW, self._last_data_row(ws) + 1):
-            record = {}
-            for key, col in cols.items():
-                value = ws.cell(row, col).value
-                if isinstance(value, (dt.datetime, dt.date)):
-                    value = value.isoformat(timespec="seconds")
-                record[key] = value
-            if not (record.get("reference") or record.get("brand")):
-                continue
-            record["row"] = row
-            records.append(record)
-        records.sort(key=lambda r: r.get("submitted_at") or "", reverse=True)
-        return records
+        return self._snapshot()["records"]
 
     def stats(self):
         """Counts that mirror the Dashboard sheet (computed from raw rows)."""
-        records = self.list_applications()
-        settings = self.settings()
+        snapshot = self._snapshot()
+        records = snapshot["records"]
+        settings = snapshot["settings"]
 
         def tally(key, options=None):
             counts = {opt: 0 for opt in (options or [])}

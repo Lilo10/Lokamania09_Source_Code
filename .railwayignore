@@ -1,0 +1,34 @@
+# Files that should never be uploaded to the host.
+
+# Local secrets — the live ones are set as environment variables on the host.
+.env
+.env.local
+
+# Python
+server/.venv/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Applicant data and backups live on a host volume, never in the repository.
+*.xlsx
+*.xls
+*.xlsm
+~$*.xlsx
+backups/
+
+# The plan generator is a local desktop tool, not part of the website.
+make_plan.py
+
+# The VPS deployment scripts are unused on a managed platform.
+deploy/vps/
+
+# Editor / OS junk
+.DS_Store
+._*
+.idea/
+.vscode/
+*.swp
+*~
+*.log

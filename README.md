@@ -93,9 +93,58 @@ the change lands in the Applications sheet. You can also delete test rows direct
 
 ## Hosting
 
-This version runs **locally** and needs a server — GitHub Pages can no longer host it (it is static
-only). To go online later, deploy `server/` to any small Python host (Render, Railway, Fly.io, or a
-VPS) and point `EXCEL_PATH` at the workbook on persistent storage.
+This version needs a real server — GitHub Pages cannot host it (it only serves static files).
+Everything needed to launch on a VPS is in **`deploy/`**:
+
+| File | Runs on | What it does |
+|---|---|---|
+| `deploy/upload.sh` | your Mac | rsyncs the code + workbook, then runs setup |
+| `deploy/setup.sh` | the server | installs Caddy, gunicorn, the systemd service, firewall, daily backups |
+| `deploy/Caddyfile` | the server | reverse proxy + automatic HTTPS |
+| `deploy/lokamania.service` | the server | starts the app on boot and restarts it if it crashes |
+| `deploy/backup.sh` | the server | nightly snapshot of the workbook (30-day history) |
+| `deploy/fetch-workbook.sh` | your Mac | downloads the live workbook to look at in Excel |
+
+### Going live
+
+```bash
+# 1. From the project folder, once the server has an IP address:
+./deploy/upload.sh root@YOUR_SERVER_IP
+
+# 2. Point your domain at the server — one DNS "A" record:
+#    mylokamania.com      A   YOUR_SERVER_IP
+
+# 3. Check it is healthy:
+ssh root@YOUR_SERVER_IP 'systemctl status lokamania --no-pager'
+ssh root@YOUR_SERVER_IP 'curl -s http://127.0.0.1:8000/api/health'
+```
+
+Later, to push code changes without touching the data:
+
+```bash
+./deploy/upload.sh --code-only
+```
+
+### How it is laid out on the server
+
+```
+/opt/lokamania/          code (rsync'd from this repo)
+/srv/lokamania-data/     the workbook + backups  ← the only writable folder
+etc/caddy/Caddyfile      HTTPS + reverse proxy
+etc/systemd/system/lokamania.service
+```
+
+The workbook is deliberately **outside** the web root, so it can never be downloaded over HTTP.
+gunicorn runs as an unprivileged user (`lokamania`) on `127.0.0.1:8000` — that port is not reachable
+from the internet; Caddy is the only thing that can talk to it.
+
+### Important once it is live
+
+- **The server holds the master workbook.** Do not edit the OneDrive copy and expect it to appear.
+  Use `./deploy/fetch-workbook.sh` to pull a read-only copy, and close it in Excel when done.
+- The admin password is copied to the server's `/opt/lokamania/.env`. Change it there if you change
+  it here, or re-run `./deploy/upload.sh --no-setup` after editing.
+- Backups run at 03:17 and are kept 30 days in `/srv/lokamania-data/backups/`.
 
 ## Original Google Form
 

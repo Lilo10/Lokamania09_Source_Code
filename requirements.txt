@@ -1,0 +1,4 @@
+# Railway (and most Python hosts) look for requirements.txt in the project
+# ROOT, but ours lives in server/ next to the code that uses it.
+# This file just points at the real one so there is a single source of truth.
+-r server/requirements.txt

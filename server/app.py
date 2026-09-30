@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import re
 import secrets
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -25,10 +26,8 @@ from flask import Flask, abort, jsonify, request, send_from_directory
 from excel_db import ExcelDatabase, ExcelWriteRefused
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_EXCEL = (
-    "/Users/macbookair/Library/CloudStorage/OneDrive-Personal/"
-    "Lokamania Website/Lokamania_09_Brand_Applications_FINAL.xlsx"
-)
+
+
 def _load_env(path):
     """Tiny dependency-free .env loader. Real env vars always win."""
     path = Path(path)
@@ -48,9 +47,51 @@ def _load_env(path):
 
 _load_env(PROJECT_ROOT / ".env")
 
-EXCEL_PATH = os.environ.get("EXCEL_PATH", DEFAULT_EXCEL)
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "lokamania-admin")
+
+def _required_env(name, *, hint):
+    """Read a mandatory setting or stop the server with a clear message.
+
+    There are deliberately no default values here. A silently wrong default is
+    much worse than not starting: a guessed admin password would be guessable by
+    anyone, and a guessed workbook path would look like an empty database.
+    """
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise SystemExit(
+            f"\nERROR: {name} is not set, so the server cannot start safely.\n"
+            f"       {hint}\n\n"
+            f"       Local machine? Check the .env file in the project root:\n"
+            f"         {PROJECT_ROOT / '.env'}\n"
+            f"       Deployed on Railway? Set it under Settings -> Variables.\n"
+        )
+    return value
+
+
+EXCEL_PATH = _required_env(
+    "EXCEL_PATH",
+    hint="It must point at Lokamania_09_Brand_Applications_FINAL.xlsx "
+         "(on Railway this is normally /data/Lokamania_09_Brand_Applications_FINAL.xlsx).",
+)
+ADMIN_PASSWORD = _required_env(
+    "ADMIN_PASSWORD",
+    hint="Use a long random password, not a memorable one.",
+)
+# Refuse an obviously weak password rather than quietly protecting the admin
+# page with it.
+if len(ADMIN_PASSWORD) < 12:
+    raise SystemExit(
+        "\nERROR: ADMIN_PASSWORD is too short (minimum 12 characters).\n"
+        "       Please choose a longer one.\n"
+    )
+
 PORT = int(os.environ.get("PORT", "5000"))
+
+excel_file = Path(EXCEL_PATH)
+if not excel_file.exists():
+    raise SystemExit(
+        f"\nERROR: the workbook was not found at:\n         {EXCEL_PATH}\n"
+        f"       Check the EXCEL_PATH value and that the file is readable.\n"
+    )
 
 db = ExcelDatabase(EXCEL_PATH)
 app = Flask(__name__, static_folder=None)
@@ -60,6 +101,55 @@ app = Flask(__name__, static_folder=None)
 # server restarts the token is gone, so the admin user must sign in again.
 TOKEN_TTL_SECONDS = 60 * 60  # sliding 1-hour expiry
 ADMIN_TOKENS = {}            # token -> absolute expiry (time.monotonic)
+
+# Brute-force protection for the login endpoint. Without this, /admin is a free
+# password oracle: unlimited guesses against a single shared secret.
+LOGIN_MAX_ATTEMPTS = 5            # wrong tries before the door is shut
+LOGIN_LOCKOUT_SECONDS = 15 * 60   # how long the lockout lasts
+LOGIN_ATTEMPTS = {}               # client key -> [count, locked_until]
+LOGIN_LOCK = threading.Lock()
+
+
+def _client_key():
+    """Identify the caller. Falls back to a shared bucket if no IP is known."""
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.remote_addr or "unknown"
+
+
+def _login_locked_out(key):
+    """Seconds left on a lockout, or 0 if this caller is allowed to try."""
+    with LOGIN_LOCK:
+        entry = LOGIN_ATTEMPTS.get(key)
+        if not entry:
+            return 0
+        _count, locked_until = entry
+        if not locked_until:
+            return 0  # has failed tries, but is not currently locked
+        remaining = locked_until - time.monotonic()
+        if remaining <= 0:
+            LOGIN_ATTEMPTS.pop(key, None)  # lockout has now expired
+            return 0
+        return int(remaining) + 1
+
+
+def _record_login_failure(key):
+    with LOGIN_LOCK:
+        entry = LOGIN_ATTEMPTS.get(key)
+        count = entry[0] + 1 if entry else 1
+        locked_until = entry[1] if entry else 0.0
+        if count >= LOGIN_MAX_ATTEMPTS:
+            locked_until = time.monotonic() + LOGIN_LOCKOUT_SECONDS
+        LOGIN_ATTEMPTS[key] = [count, locked_until]
+        if count >= LOGIN_MAX_ATTEMPTS:
+            return int(LOGIN_LOCKOUT_SECONDS) + 1
+        return LOGIN_MAX_ATTEMPTS - count
+
+
+def _clear_login_failures(key):
+    with LOGIN_LOCK:
+        LOGIN_ATTEMPTS.pop(key, None)
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -250,9 +340,36 @@ def require_admin():
 
 @app.post("/api/auth/login")
 def login():
+    key = _client_key()
+
+    # Already locked out? Reject without even looking at the password.
+    locked_for = _login_locked_out(key)
+    if locked_for:
+        return jsonify(
+            ok=False,
+            error=(f"Too many failed sign-in attempts. Try again in "
+                   f"{locked_for // 60} minute(s)."),
+        ), 429
+
     payload = request.get_json(silent=True) or {}
-    if payload.get("password") != ADMIN_PASSWORD:
-        return jsonify(ok=False, error="Wrong password"), 401
+    if not secrets.compare_digest(
+        str(payload.get("password") or ""), ADMIN_PASSWORD
+    ):
+        tries_left = _record_login_failure(key)
+        if tries_left > LOGIN_MAX_ATTEMPTS:
+            minutes = (tries_left - 1) // 60 + 1
+            return jsonify(
+                ok=False,
+                error=(f"Too many failed sign-in attempts. This address is "
+                       f"locked for {minutes} minute(s)."),
+            ), 429
+        return jsonify(
+            ok=False,
+            error=(f"Wrong password. {tries_left} attempt(s) left before "
+                   f"this address is locked out."),
+        ), 401
+
+    _clear_login_failures(key)
     token = secrets.token_urlsafe(32)
     ADMIN_TOKENS[token] = time.monotonic() + TOKEN_TTL_SECONDS
     return jsonify(ok=True, token=token)
@@ -340,8 +457,23 @@ def unauthorized(_error):
 
 
 if __name__ == "__main__":
+    # Debug mode is opt-in and off by default. The Werkzeug debugger it enables
+    # allows anyone who can reach the error page to run code on the server, so
+    # it must never be switched on for a public deployment. Real hosting runs
+    # this file under gunicorn instead (see Procfile), which never calls
+    # app.run() and so is unaffected either way.
+    #
+    #   ./server/run.sh                    # normal local use, no debugger
+    #   FLASK_DEBUG=1 ./server/run.sh      # only when actively debugging locally
+    debug = os.environ.get("FLASK_DEBUG", "").strip().lower() in ("1", "true", "yes")
+    host = os.environ.get("HOST", "127.0.0.1")
+
     print("Lokamania 09 server")
-    print(f"  Site:  http://127.0.0.1:{PORT}/")
-    print(f"  Admin: http://127.0.0.1:{PORT}/admin")
+    print(f"  Site:  http://{host}:{PORT}/")
+    print(f"  Admin: http://{host}:{PORT}/admin")
     print(f"  Excel: {EXCEL_PATH}")
-    app.run(host="127.0.0.1", port=PORT, debug=True, use_reloader=False)
+    print(f"  Debug: {'ON (local only)' if debug else 'off'}")
+    if debug and host not in ("127.0.0.1", "localhost", "::1"):
+        print("  WARNING: debug is on but the server is not local-only.")
+
+    app.run(host=host, port=PORT, debug=debug, use_reloader=False)

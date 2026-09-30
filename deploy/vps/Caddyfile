@@ -1,0 +1,31 @@
+# Lokamania 09 — Caddy reverse proxy + automatic HTTPS
+#
+# Installed to /etc/caddy/Caddyfile by deploy/setup.sh
+# Caddy obtains and renews the Let's Encrypt certificate on its own.
+#
+# If you are using Cloudflare, set SSL/TLS -> Overview -> "Full (strict)"
+# so Caddy's own certificate is validated rather than Cloudflare's edge cert.
+
+mylokamania.com, www.mylokamania.com {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options    "nosniff"
+		Referrer-Policy           "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# gunicorn binds to 127.0.0.1 only, so port 8000 is never public.
+	reverse_proxy 127.0.0.1:8000 {
+		header_up X-Forwarded-Proto {scheme}
+	}
+
+	log {
+		output file /var/log/caddy/lokamania.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+		format json
+	}
+}
