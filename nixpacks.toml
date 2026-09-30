@@ -6,11 +6,13 @@
 providers = ["python@3.12"]
 
 [phases.build]
+# The two "ls" lines are diagnostics: they print what actually arrived so that a
+# failed build says whether files are missing, instead of only reporting the
+# first filename pip happens to need. Each one ends in "|| true" so a diagnostic
+# can never itself be the reason the build fails.
 cmds = [
-  # Print what actually arrived so a failed build says whether files are
-  # missing, instead of only reporting the first one pip happens to need.
-  "ls -la /app",
-  "echo '--- /app/server ---'",
+  "ls -la /app || echo 'could not list /app'",
+  "echo '--- application code ---'",
   "ls -la /app/server || echo 'NO server/ DIRECTORY IN THE BUILD'",
   "pip install --no-cache-dir -r requirements.txt",
 ]
