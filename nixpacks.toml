@@ -1,0 +1,12 @@
+# Tells Railway which language and version to build with, instead of letting it
+# guess. Without this, the Python version can drift when Railway updates its
+# defaults, and the build can fail for reasons that have nothing to do with our
+# code. Pinning it keeps builds reproducible.
+[phases.setup]
+providers = ["python@3.12"]
+
+[phases.build]
+cmds = ["pip install --no-cache-dir -r requirements.txt"]
+
+[start]
+cmd = "./start.sh"
