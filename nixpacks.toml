@@ -6,7 +6,14 @@
 providers = ["python@3.12"]
 
 [phases.build]
-cmds = ["pip install --no-cache-dir -r requirements.txt"]
+cmds = [
+  # Print what actually arrived so a failed build says whether files are
+  # missing, instead of only reporting the first one pip happens to need.
+  "ls -la /app",
+  "echo '--- /app/server ---'",
+  "ls -la /app/server || echo 'NO server/ DIRECTORY IN THE BUILD'",
+  "pip install --no-cache-dir -r requirements.txt",
+]
 
 [start]
 cmd = "./start.sh"

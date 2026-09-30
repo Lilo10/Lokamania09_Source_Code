@@ -1,3 +1,3 @@
-flask>=3.1
-openpyxl>=3.1
-gunicorn>=22.0
+# The real dependency list lives in the project root, because that is the only
+# requirements.txt most hosts look at.
+-r ../requirements.txt

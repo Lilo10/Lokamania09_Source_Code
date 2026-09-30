@@ -16,6 +16,17 @@ PORT="${PORT:-8080}"
 : "${EXCEL_PATH:?EXCEL_PATH is not set. Add it under Settings -> Variables.}"
 : "${ADMIN_PASSWORD:?ADMIN_PASSWORD is not set. Add it under Settings -> Variables.}"
 
+# The application code lives in server/. Check it is really here, because a
+# missing file otherwise shows up as an opaque gunicorn import error.
+if [ ! -f server/app.py ]; then
+  echo ""
+  echo "ERROR: server/app.py is missing from the deployed files."
+  echo "       Files in this directory:"
+  ls -la
+  echo ""
+  exit 1
+fi
+
 echo "Starting Lokamania 09 on port ${PORT}"
 echo "  workbook: ${EXCEL_PATH}"
 

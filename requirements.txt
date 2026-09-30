@@ -1,4 +1,14 @@
-# Railway (and most Python hosts) look for requirements.txt in the project
-# ROOT, but ours lives in server/ next to the code that uses it.
-# This file just points at the real one so there is a single source of truth.
--r server/requirements.txt
+# Dependencies for the Lokamania 09 site.
+#
+# This list is intentionally complete and self-contained. It used to say
+# "-r server/requirements.txt", but the build then depended on a file in a
+# subfolder being uploaded correctly; when that failed the build stopped with
+# "No such file or directory: /app/server/requirements.txt". Keeping everything
+# here means the install step only ever needs this one file.
+#
+# server/requirements.txt points back at this file, so there is still only one
+# place to change when a dependency is added.
+
+flask>=3.1
+openpyxl>=3.1
+gunicorn>=22.0
