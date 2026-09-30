@@ -87,14 +87,42 @@ if len(ADMIN_PASSWORD) < 12:
 PORT = int(os.environ.get("PORT", "5000"))
 
 excel_file = Path(EXCEL_PATH)
-if not excel_file.exists():
-    raise SystemExit(
-        f"\nERROR: the workbook was not found at:\n         {EXCEL_PATH}\n"
-        f"       Check the EXCEL_PATH value and that the file is readable.\n"
-    )
+# Deliberately a warning, not a fatal error. On a brand new deployment the
+# volume at /data is empty until the real workbook is uploaded, and that upload
+# needs `railway ssh` into this very container. Refusing to boot would make the
+# service unreachable and the workbook impossible to put there: a catch-22 with
+# no exit. So the server starts, stays reachable, and every endpoint that needs
+# the workbook answers with a clear 503 instead.
+WORKBOOK_MISSING = not excel_file.exists()
 
 db = ExcelDatabase(EXCEL_PATH)
 app = Flask(__name__, static_folder=None)
+
+
+def require_workbook():
+    """Stop a data request cleanly when the workbook has not been uploaded yet."""
+    if WORKBOOK_MISSING:
+        return jsonify(
+            ok=False,
+            error=(f"The database is not set up yet: no workbook was found at "
+                   f"{EXCEL_PATH}. Upload {excel_file.name} to that location, "
+                   f"then reload this page."),
+        ), 503
+    return None
+
+
+@app.before_request
+def _block_when_no_workbook():
+    """Serve the pages, but refuse data requests until the workbook is there.
+
+    The site and admin page still load on purpose: they are how you find out
+    what is wrong, and how you confirm the fix once the file is uploaded.
+    """
+    if not WORKBOOK_MISSING:
+        return None
+    if request.path.startswith(("/api/applications", "/api/stats")):
+        return require_workbook()
+    return None
 
 # Admin authentication uses short-lived bearer tokens kept in memory.
 # There is no persistent cookie: as soon as the page is refreshed or the
@@ -277,7 +305,14 @@ def assets(filename):
 # ----------------------------------------------------------------- endpoints
 @app.get("/api/health")
 def health():
-    return jsonify(ok=True, time=datetime.now().isoformat(timespec="seconds"))
+    # Always 200 while the process is alive, even with no workbook. Railway uses
+    # this to decide whether the container is healthy, and the container has to
+    # stay healthy so that `railway ssh` can still reach it to upload the file.
+    return jsonify(
+        ok=True,
+        time=datetime.now().isoformat(timespec="seconds"),
+        workbook="ready" if not WORKBOOK_MISSING else "not uploaded yet",
+    )
 
 
 @app.post("/api/applications")

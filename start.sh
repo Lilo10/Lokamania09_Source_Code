@@ -30,6 +30,20 @@ fi
 echo "Starting Lokamania 09 on port ${PORT}"
 echo "  workbook: ${EXCEL_PATH}"
 
+# A fresh deployment has an empty volume, so the workbook is not there yet. Warn
+# loudly but keep starting: the container has to stay up so that `railway ssh`
+# can reach it and upload the file. The app answers data requests with a clear
+# 503 until then.
+if [ ! -f "${EXCEL_PATH}" ]; then
+  echo ""
+  echo "  ################  WORKBOOK NOT FOUND  ################"
+  echo "  No file at: ${EXCEL_PATH}"
+  echo "  The site will load, but applications cannot be saved or listed."
+  echo "  Upload the workbook to that path, then reload."
+  echo "  #######################################################"
+  echo ""
+fi
+
 # Run gunicorn as a module of this same Python, rather than as a bare "gunicorn"
 # command. On a host the two can differ (a venv holds Flask but gunicorn is only
 # on the system path, or vice versa), and that mismatch is a common cause of a
