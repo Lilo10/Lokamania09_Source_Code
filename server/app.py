@@ -19,7 +19,6 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlparse
 
 from flask import Flask, abort, jsonify, request, send_from_directory
 
@@ -243,9 +242,14 @@ def validate_application(payload, settings):
         errors.append("Instagram is required")
 
     website = text("website")
-    parsed = urlparse(website)
-    if not website or parsed.scheme not in ("http", "https") or not parsed.netloc:
-        errors.append("Website must be a full URL, e.g. https://yourbrand.com")
+    # Website is optional: plenty of brands do not have one, so a blank value is
+    # accepted. When something *is* typed, only check that it plausibly is a
+    # link. Deliberately not strict about the scheme, because applicants paste
+    # "brand.com" and "instagram.com/brand" into this box far more often than a
+    # bare https:// URL, and a rejected submission is worse than an untidy cell
+    # in Excel that the admin can tidy later.
+    if website and not re.match(r"^[^\s@]+\.[^\s@]{2,}", website):
+        errors.append("Website should look like a link, e.g. brand.com")
     if not text("aboutBrand"):
         errors.append("About the brand is required")
 
