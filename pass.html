@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Frost List · Lokamania 09</title>
+<meta name="description" content="Free pre-registration for Lokamania 09, 6–7 November 2026 at U Venues. Doors are open to everyone. The Frost List gets you the extras.">
+<meta name="theme-color" content="#03131a">
+<link rel="icon" type="image/png" href="/assets/frost/logo-small.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#03131a;--navy:#0a2733;--deep:#05202a;--blue:#2fa9b8;--chrome:#5b93b8;--sky:#93c3df;
+  --ice:#a8e4e8;--frost:#e3f5f7;--white:#f8fbff;--muted:#a4bec7;--royal:#2430b4;--royal-t:#a3acff;--royal-s:#cdd2ff;--red:#e8202f;
+  --line:rgba(128,192,192,.28);--outline:#02090c;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;overflow-x:clip}
+body{margin:0;background:var(--ink);color:var(--white);font-family:Inter,Arial,sans-serif;line-height:1.5;overflow-x:clip}
+a{color:inherit;text-decoration:none}
+img{max-width:100%;display:block}
+.wrap{width:min(1160px,calc(100% - 32px));margin:auto}
+
+
+/* ---------- nav ---------- */
+.nav{position:sticky;top:0;z-index:30;background:rgba(2,16,22,.86);backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
+.navin{min-height:66px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.nav-logo{width:96px}
+.nav-links{display:flex;gap:18px;align-items:center;font-weight:800;font-size:.85rem}
+.nav-links .hide-sm{color:var(--muted)}
+.nav-links .hide-sm:hover{color:var(--white)}
+
+/* ---------- buttons & stickers ---------- */
+.btn{display:inline-flex;align-items:center;gap:8px;justify-content:center;font-weight:900;text-transform:uppercase;letter-spacing:.04em;font-size:.9rem;padding:14px 22px;border-radius:999px;border:2.5px solid var(--outline);background:var(--royal);color:#fff;box-shadow:4px 4px 0 var(--outline);transition:transform .15s,box-shadow .15s}
+.btn:hover{transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--outline)}
+.btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--outline)}
+.btn.ghost{background:transparent;color:var(--white);border-color:var(--ice);box-shadow:none}
+.btn.ghost:hover{background:rgba(168,228,232,.1)}
+.btn.sm{padding:9px 15px;font-size:.78rem;box-shadow:3px 3px 0 var(--outline)}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;font-weight:900;font-size:.76rem;letter-spacing:.12em;text-transform:uppercase}
+
+/* ---------- hero ---------- */
+.hero{position:relative;overflow:hidden;padding:46px 0 70px;
+  background:radial-gradient(circle at 50% 30%,rgba(47,169,184,.42),transparent 38%),radial-gradient(circle at 90% 85%,rgba(36,48,180,.28),transparent 30%),linear-gradient(160deg,#020d12,#0a2b38 55%,#04151a)}
+.hero:before{content:"";position:absolute;inset:-40%;background:repeating-conic-gradient(from 25deg,rgba(96,192,192,.05) 0deg 8deg,transparent 8deg 19deg);filter:blur(8px);animation:spin 40s linear infinite}
+.hero-in{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;text-align:center}
+.free-tag{background:var(--frost);color:var(--navy);border:2.5px solid var(--outline);box-shadow:3px 3px 0 var(--outline);transform:rotate(-3deg)}
+.free-tag b{color:#0e7d8c}
+.hero-logo{width:min(440px,78vw);margin:18px 0 6px;filter:drop-shadow(0 16px 22px rgba(0,0,0,.5));animation:float 5s ease-in-out infinite}
+.hero h1{margin:6px 0 0;font-size:clamp(2.6rem,9vw,5.6rem);line-height:.9;letter-spacing:-.05em;text-transform:uppercase;font-weight:900;
+  background:linear-gradient(115deg,#5b93b8 0%,#e9f6ff 28%,#7fb3d3 46%,#ffffff 62%,#5b93b8 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
+  -webkit-text-stroke:0;filter:drop-shadow(3px 4px 0 var(--outline))}
+.hero h1 span{display:inline-block;-webkit-text-fill-color:initial;color:var(--royal-t);filter:none;transform:rotate(12deg);font-size:.7em;vertical-align:middle}
+.tagline{font-size:clamp(1.05rem,3.4vw,1.4rem);font-weight:800;max-width:620px;margin:18px auto 6px;color:#d4e7ea}
+.tagline mark{background:var(--royal);color:#fff;padding:0 8px;border-radius:6px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.date-chip{margin:14px 0 26px;background:rgba(9,32,44,.85);border:1px solid var(--line);color:var(--ice)}
+.date-chip i{font-style:normal;color:var(--royal-t)}
+.hero-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+
+.countdown{display:flex;gap:10px;margin-top:34px}
+.cd{min-width:74px;padding:12px 8px 9px;border-radius:14px;background:rgba(9,32,44,.85);border:1px solid var(--line)}
+.cd b{display:block;font-size:1.9rem;line-height:1;font-weight:900;color:var(--white);font-variant-numeric:tabular-nums}
+.cd small{font-size:.66rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.hero-deer{position:absolute;right:0;top:170px;width:min(250px,22vw);filter:drop-shadow(0 12px 18px rgba(0,0,0,.45));animation:leap 4.5s ease-in-out infinite;z-index:3}
+@keyframes leap{0%,100%{transform:translate(0,0) rotate(-4deg)}50%{transform:translate(-14px,-16px) rotate(2deg)}}
+.perks-head{display:flex;align-items:center;justify-content:space-between;gap:20px}
+.nine{width:min(200px,26vw);transform:rotate(8deg);filter:drop-shadow(5px 6px 0 rgba(0,0,0,.55))}
+.join-deer{width:190px;margin:0 0 8px -6px;transform:scaleX(-1) rotate(4deg);filter:drop-shadow(0 10px 14px rgba(0,0,0,.4))}
+.cd-label{margin-top:10px;font-size:.78rem;color:var(--muted);font-weight:700}
+
+/* snow */
+.snow{position:absolute;inset:0;pointer-events:none;z-index:1}
+.flake{position:absolute;top:-20px;color:#fff;opacity:.7;animation:fall linear infinite}
+
+/* ---------- ticker ---------- */
+.ticker{background:var(--royal);color:#fff;border-block:3px solid var(--outline);overflow:hidden;transform:rotate(-1.5deg);margin:-14px -10px 0;position:relative;z-index:5}
+.ticker-track{display:flex;width:max-content;animation:scroll 28s linear infinite}
+.ticker span{padding:12px 0;font-weight:900;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;font-size:1rem}
+.ticker span:after{content:"✦";margin:0 18px}
+
+/* ---------- sections ---------- */
+section{padding:84px 0}
+.eyebrow{font-size:.76rem;font-weight:900;letter-spacing:.17em;text-transform:uppercase;color:var(--ice)}
+h2{font-size:clamp(2.2rem,6vw,4.4rem);line-height:.95;letter-spacing:-.05em;margin:10px 0 14px;text-transform:uppercase;font-weight:900}
+h2 em{font-style:normal;color:var(--royal-t)}
+.intro{max-width:640px;color:#bfd6dd;font-size:1.05rem;margin:0}
+
+/* ---------- perks ---------- */
+.perks{background:radial-gradient(circle at 15% 20%,rgba(47,169,184,.16),transparent 35%),#04141c;padding-top:100px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:22px}
+.perk{--rot:0deg;position:relative;background:var(--frost);color:var(--navy);border:2.5px solid var(--outline);border-radius:20px;padding:20px 20px 16px;box-shadow:6px 6px 0 var(--outline);transform:rotate(var(--rot));transition:transform .2s,box-shadow .2s,opacity .2s;display:flex;flex-direction:column}
+.perk:nth-child(4n+1){--rot:-1.4deg}.perk:nth-child(4n+2){--rot:1deg}.perk:nth-child(4n+3){--rot:-.6deg}.perk:nth-child(4n){--rot:1.5deg}
+.perk:hover{transform:rotate(0) translateY(-4px) scale(1.02);box-shadow:9px 9px 0 var(--outline)}
+.perk.hidden{display:none}
+.subhead{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:40px 0 22px}
+.subhead h3{margin:0;font-size:clamp(1.3rem,3vw,1.8rem);font-weight:900;text-transform:uppercase;letter-spacing:-.03em}
+.tag-all,.tag-pack{font-weight:900;font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;padding:6px 12px;border-radius:999px;border:2px solid var(--outline);color:var(--outline);box-shadow:3px 3px 0 var(--outline);transform:rotate(-2deg)}
+.tag-all{background:var(--royal);color:#fff}.tag-pack{background:#ffc2dc}
+.perk.everyone{background:linear-gradient(140deg,#eef0ff,#e3f5f7)}
+.perk.cta-card{background:var(--royal);color:#fff;justify-content:center;align-items:flex-start}
+.perk.cta-card h3{font-size:1.7rem}
+.perk.cta-card p{color:#e6e9ff}
+.perk.cta-card .btn{background:#fff;color:var(--royal);box-shadow:3px 3px 0 var(--outline)}
+.perk-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.emoji{font-size:2.3rem;line-height:1;width:58px;height:58px;display:grid;place-items:center;border-radius:16px;background:var(--white);border:2px solid var(--outline)}
+.num{font-weight:900;font-size:.8rem;color:#5f7a85}
+.grp{display:inline-block;margin-top:14px;font-size:.66rem;font-weight:900;letter-spacing:.14em;text-transform:uppercase;padding:4px 9px;border-radius:999px;border:1.5px solid var(--outline);align-self:flex-start}
+.g-first{background:#93c3df}.g-save{background:var(--royal-s)}.g-exp{background:#c9b8ff}.g-comm{background:#ffc2dc}
+.perk h3{margin:10px 0 6px;font-size:1.32rem;line-height:1.1;font-weight:900;letter-spacing:-.02em;text-transform:uppercase}
+.perk p{margin:0;color:#2b4a55;font-weight:500;font-size:.95rem}
+.perk.hero-perk{background:linear-gradient(140deg,#f6fff0,#e3f5f7)}
+.perk .badge-new{position:absolute;top:-14px;right:16px;background:var(--royal-s);border:2px solid var(--outline);border-radius:999px;padding:3px 10px;font-size:.66rem;font-weight:900;letter-spacing:.1em;text-transform:uppercase;transform:rotate(6deg)}
+
+/* ---------- how it works ---------- */
+.how-it{background:linear-gradient(150deg,#0a2f3f,#05202a 54%,#03131a);border-block:1px solid var(--line)}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:34px;counter-reset:s}
+.step{padding:26px;border-radius:18px;background:rgba(9,32,44,.85);border:1px solid var(--line);position:relative}
+.step:before{counter-increment:s;content:counter(s);display:grid;place-items:center;width:44px;height:44px;border-radius:12px;background:var(--royal);color:#fff;font-weight:900;font-size:1.3rem;border:2px solid var(--outline);box-shadow:3px 3px 0 var(--outline);margin-bottom:16px}
+.step h3{margin:0 0 6px;font-size:1.2rem;text-transform:uppercase;font-weight:900}
+.step p{margin:0;color:#bfd6dd}
+
+/* ---------- form ---------- */
+.join{background:radial-gradient(circle at 80% 10%,rgba(36,48,180,.28),transparent 30%),radial-gradient(circle at 10% 60%,rgba(47,169,184,.2),transparent 40%),#04141c}
+.join-grid{display:grid;grid-template-columns:.8fr 1.2fr;gap:56px;align-items:start}
+.join-info{position:sticky;top:96px}
+.checklist{list-style:none;padding:0;margin:26px 0}
+.checklist li{display:flex;gap:12px;padding:12px 0;border-top:1px solid var(--line);font-weight:700;color:#cfdde3}
+.checklist li:before{content:"✦";color:var(--royal-t)}
+.form-card{background:var(--white);border:2.5px solid var(--outline);border-radius:22px;box-shadow:8px 8px 0 var(--outline);overflow:hidden}
+.form-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;background:var(--navy);color:var(--white);border-bottom:2.5px solid var(--outline)}
+.form-head b{font-weight:900;text-transform:uppercase;letter-spacing:.04em}
+.dots{display:flex;gap:6px}.dots i{width:11px;height:11px;border-radius:50%;border:1.5px solid var(--outline);background:var(--royal)}.dots i:nth-child(2){background:var(--ice)}.dots i:nth-child(3){background:#fff}
+.form-card iframe{display:block;width:100%;height:2171px;border:0;background:var(--white)}
+.form-foot{padding:14px 20px;background:var(--frost);color:var(--navy);font-size:.88rem;font-weight:700;border-top:1px solid #9fd8dd}
+.form-foot a{color:#0e7d8c;text-decoration:underline;text-underline-offset:3px}
+
+/* ---------- faq ---------- */
+.faq{background:#03131a}
+.faq-grid{display:grid;grid-template-columns:.7fr 1.3fr;gap:56px}
+.faq details{border-top:1px solid var(--line);padding:18px 0}
+.faq details:last-child{border-bottom:1px solid var(--line)}
+.faq summary{font-size:1.08rem;font-weight:900;cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:16px}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary:after{content:"+";color:var(--royal-t);font-size:1.4rem;line-height:1}
+.faq details[open] summary:after{content:"–"}
+.faq p{color:#b3c9d1;margin:10px 0 0;max-width:640px}
+
+/* ---------- footer ---------- */
+.footer{background:#020e14;padding:34px 0;border-top:1px solid var(--line)}
+.footin{display:flex;justify-content:space-between;align-items:center;gap:20px}
+.footer img{width:110px}
+.footer small{color:#8aa6b2}
+
+/* sticky mobile CTA */
+.mcta{display:none}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes float{50%{transform:translateY(-8px)}}
+@keyframes scroll{to{transform:translateX(-50%)}}
+@keyframes fall{to{transform:translateY(110vh) rotate(240deg)}}
+@media (prefers-reduced-motion:reduce){*,*:before{animation:none!important;transition:none!important}}
+
+@media(max-width:860px){
+  .join-grid,.faq-grid{grid-template-columns:1fr;gap:28px}
+  .join-info{position:static}
+  .steps{grid-template-columns:1fr}
+}
+@media(max-width:860px){.hero-deer{position:static;width:150px;margin:-6px 0 4px;order:0}}
+@media(max-width:600px){.nine{width:96px}.join-deer{width:140px}
+  .nav-links .hide-sm{display:none}
+  .nav-logo{width:80px}
+  section{padding:62px 0}
+  .perks{padding-top:80px}
+  .cd{min-width:64px}.cd b{font-size:1.55rem}
+  .grid{grid-template-columns:1fr}
+  .form-card iframe{height:2300px}
+  .footin{flex-direction:column;align-items:flex-start}
+  .mcta{display:flex;position:fixed;left:16px;right:16px;bottom:14px;z-index:40;justify-content:center;transition:opacity .2s,transform .2s}
+  .mcta.off{opacity:0;transform:translateY(20px);pointer-events:none}
+}
+</style>
+</head>
+<body>
+
+
+<header class="nav">
+  <div class="wrap navin">
+    <a href="https://mylokamania.com/" aria-label="Lokamania 09 home"><img class="nav-logo" src="/assets/frost/logo-small.png" alt="Lokamania 09"></a>
+    <nav class="nav-links">
+      <a class="hide-sm" href="#perks">Perks</a>
+      <a class="hide-sm" href="#how">How it works</a>
+      <a class="hide-sm" href="#faq">FAQ</a>
+      <a class="btn sm" href="#join">Join ❄</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero" style="padding-top:46px">
+  <div class="snow" id="snow" aria-hidden="true"></div>
+  <div class="wrap hero-in">
+    <span class="chip free-tag">Entry is <b>free</b> · always</span>
+    <img class="hero-logo" src="/assets/frost/logo.png" alt="Lokamania 09">
+    <img class="hero-deer" src="/assets/frost/reindeer.png" alt="" aria-hidden="true">
+    <h1>The Frost List <span>❄</span></h1>
+    <p class="tagline">Doors are open to everyone. <mark>The Frost List gets you the extras.</mark></p>
+    <span class="chip date-chip">6–7 Nov 2026 <i>✦</i> U Venues</span>
+    <div class="hero-actions">
+      <a class="btn" href="#join">Get on the list →</a>
+      <a class="btn ghost" href="#perks">See the perks</a>
+    </div>
+    <div class="countdown" id="countdown" aria-label="Countdown to Lokamania 09">
+      <div class="cd"><b id="cd-d">--</b><small>days</small></div>
+      <div class="cd"><b id="cd-h">--</b><small>hrs</small></div>
+      <div class="cd"><b id="cd-m">--</b><small>min</small></div>
+      <div class="cd"><b id="cd-s">--</b><small>sec</small></div>
+    </div>
+    <div class="cd-label">until doors open · 6–7 Nov</div>
+  </div>
+</section>
+
+<div class="ticker" aria-hidden="true">
+  <div class="ticker-track">
+    <span>Free entry</span><span>Lineup 24h early</span><span>Double spin</span><span>Free drink or treat</span><span>EGP 100–200 off</span><span>Mystery 10–20% off</span><span>Tote or sticker pack</span>
+    <span>Free entry</span><span>Lineup 24h early</span><span>Double spin</span><span>Free drink or treat</span><span>EGP 100–200 off</span><span>Mystery 10–20% off</span><span>Tote or sticker pack</span>
+  </div>
+</div>
+
+<section class="perks" id="perks">
+  <div class="wrap">
+    <div class="eyebrow">What you unlock</div>
+    <div class="perks-head"><h2>Endless perks.<br><em>Zero cost.</em></h2><img class="nine" src="/assets/frost/nine.png" alt="09"></div>
+    <p class="intro">Everyone on the list gets two perks. On top of that, every sign-up unlocks a surprise <b>Frost Pack</b> with one extra perk, revealed in your welcome email.</p>
+
+    <div class="subhead"><span class="tag-all">For everyone</span><h3>On the list = you get these</h3></div>
+    <div class="grid" id="grid-all">
+      <article class="perk everyone">
+        <div class="perk-top"><div class="emoji" aria-hidden="true">📣</div></div>
+        <span class="grp" style="background:var(--royal-s)">Everyone</span>
+        <h3>Lineup first</h3>
+        <p>See the full brand lineup 24 hours before it goes public.</p>
+      </article>
+      <article class="perk everyone">
+        <div class="perk-top"><div class="emoji" aria-hidden="true">💬</div></div>
+        <span class="grp" style="background:var(--royal-s)">Everyone</span>
+        <h3>Registrants-only channel</h3>
+        <p>A WhatsApp community or Instagram broadcast with drops, deals and announcements.</p>
+      </article>
+    </div>
+
+    <div class="subhead"><span class="tag-pack">+1 surprise</span><h3>Plus one Frost Pack. Which one's yours? 👀</h3></div>
+    <div class="grid" id="grid">
+      <article class="perk ">
+        <div class="perk-top"><div class="emoji" aria-hidden="true">🎡</div></div>
+        <span class="grp" style="background:#e3f5f7">❄️ Snowflake Pack</span>
+        <h3>Double spin</h3>
+        <p>Two spins at Spin &amp; Win instead of one. Double the luck.</p>
+      </article>
+      <article class="perk ">
+        <div class="perk-top"><div class="emoji" aria-hidden="true">👜</div></div>
+        <span class="grp" style="background:#93c3df">🧊 Icicle Pack</span>
+        <h3>Tote bag or sticker pack</h3>
+        <p>A Lokamania tote bag or sticker pack, while stocks last each day.</p>
+      </article>
+      <article class="perk ">
+        <div class="perk-top"><div class="emoji" aria-hidden="true">🍩</div></div>
+        <span class="grp" style="background:#ffd59e">🔥 Fireside Pack</span>
+        <h3>Food or drink treat</h3>
+        <p>A free drink, or a discount on a drink or a sweet treat like a donut or dessert, at one of our F&amp;B partners at U Venues.</p>
+      </article>
+      <article class="perk ">
+        <div class="perk-top"><div class="emoji" aria-hidden="true">💸</div></div>
+        <span class="grp" style="background:#cdd2ff">🌨️ Blizzard Pack</span>
+        <h3>Registration voucher</h3>
+        <p>EGP 100–200 off at selected brands.</p>
+      </article>
+      <article class="perk ">
+        <div class="perk-top"><div class="emoji" aria-hidden="true">🔮</div></div>
+        <span class="grp" style="background:#c9b8ff">🌫️ Whiteout Pack</span>
+        <h3>Mystery discount</h3>
+        <p>10–20% off at selected brands. Your exact percentage is a surprise until you collect your voucher.</p>
+      </article>
+      <article class="perk cta-card" data-g="cta"><div class="emoji" aria-hidden="true">❄️</div><h3>Which pack is yours?</h3><p>Sign up in one minute to find out. It's free.</p><a class="btn sm" href="#join">Join the list →</a></article>
+    </div>
+  </div>
+</section>
+
+<section class="how-it" id="how">
+  <div class="wrap">
+    <div class="eyebrow">How it works</div>
+    <h2>Easy as <em>1, 2, 3</em></h2>
+    <div class="steps">
+      <div class="step"><h3>Sign up</h3><p>Fill in the form below. It takes about a minute and it's free.</p></div>
+      <div class="step"><h3>Reveal your pack</h3><p>Check your inbox. Your welcome email reveals your Frost Pack, your surprise perk, your pass code and your channel link.</p></div>
+      <div class="step"><h3>Grab your voucher</h3><p>Come on 6 or 7 Nov and show your email at the Lokamania booth to collect your physical voucher. That voucher is what you redeem, not the email.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="join" id="join">
+  <div class="wrap join-grid">
+    <div class="join-info">
+      <img class="join-deer" src="/assets/frost/reindeer.png" alt="" aria-hidden="true">
+      <div class="eyebrow">Join the list</div>
+      <h2>Get your <em>extras</em> ❄</h2>
+      <p class="intro">You don't need the Frost List to get in, because doors are open to everyone. Signing up just means you show up with a Frost Pack.</p>
+      <ul class="checklist">
+        <li>100% free, no ticket needed</li>
+        <li>Lineup first + the registrants-only channel</li>
+        <li>A surprise Frost Pack in your inbox</li>
+        <li>Use the email you actually check, because that's where your pack lands</li>
+      </ul>
+    </div>
+    <div class="form-card">
+      <div class="form-head"><b>Frost List sign-up</b><div class="dots"><i></i><i></i><i></i></div></div>
+      <iframe src="https://docs.google.com/forms/d/e/1FAIpQLSddatG2qkm3q3FV1xcFXaSkL6puxpgaRwbhHeevAcN6IxpsLQ/viewform?embedded=true" title="Frost List sign-up form" loading="lazy">Loading…</iframe>
+      <div class="form-foot">Form not loading? <a href="https://docs.google.com/forms/d/e/1FAIpQLSddatG2qkm3q3FV1xcFXaSkL6puxpgaRwbhHeevAcN6IxpsLQ/viewform" target="_blank" rel="noopener">Open it in a new tab →</a></div>
+    </div>
+  </div>
+</section>
+
+<section class="faq" id="faq">
+  <div class="wrap faq-grid">
+    <div>
+      <div class="eyebrow">Questions</div>
+      <h2>Good to <em>know</em></h2>
+    </div>
+    <div>
+      <details open><summary>Do I need the Frost List to get in?</summary><p>No. Entry is free and open to everyone at any time on both days. The list never affects getting in; it only adds extras.</p></details>
+      <details><summary>Does it cost anything?</summary><p>No. Signing up is free, and so are the perks.</p></details>
+      <details><summary>Do I get every perk?</summary><p>Everyone on the list gets the lineup first and access to the registrants-only channel. On top of that, each sign-up gets one Frost Pack with one surprise perk, and your welcome email tells you which one. One pack per person.</p></details>
+      <details><summary>How do I claim my perk?</summary><p>Head to the Lokamania booth on 6 or 7 Nov, show your welcome email and pass code, and collect your physical voucher. Then redeem that voucher for your perk. Showing the email alone won't get you the perk, so make sure you pick up your voucher first. The lineup and the channel link come to you by email.</p></details>
+      <details><summary>Are the totes and sticker packs guaranteed?</summary><p>They're given while stocks last each day, so come early to be safe.</p></details>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="wrap footin">
+    <img src="/assets/frost/logo-small.png" alt="Lokamania 09">
+    <small>Lokamania 09 · Winter Edition · 6–7 November 2026 · U Venues</small>
+  </div>
+</footer>
+
+<a class="btn mcta" id="mcta" href="#join">Join the Frost List ❄</a>
+
+<script>
+// countdown to 6 Nov 2026, Cairo time (UTC+2 in November)
+const target=new Date("2026-11-06T12:00:00+02:00").getTime();
+const pad=n=>String(n).padStart(2,"0");
+function tick(){
+  let s=Math.max(0,Math.floor((target-Date.now())/1000));
+  if(s===0){document.getElementById("countdown").style.display="none";document.querySelector(".cd-label").textContent="Doors are open, come through ❄";return}
+  document.getElementById("cd-d").textContent=Math.floor(s/86400);
+  document.getElementById("cd-h").textContent=pad(Math.floor(s%86400/3600));
+  document.getElementById("cd-m").textContent=pad(Math.floor(s%3600/60));
+  document.getElementById("cd-s").textContent=pad(s%60);
+}
+tick();setInterval(tick,1000);
+
+// snow
+if(!matchMedia("(prefers-reduced-motion: reduce)").matches){
+  const snow=document.getElementById("snow");
+  for(let i=0;i<26;i++){
+    const f=document.createElement("span");f.className="flake";f.textContent=Math.random()>.5?"❄":"✦";
+    f.style.left=Math.random()*100+"%";f.style.fontSize=(8+Math.random()*14)+"px";
+    f.style.animationDuration=(9+Math.random()*12)+"s";f.style.animationDelay=(-Math.random()*20)+"s";
+    f.style.opacity=.25+Math.random()*.5;snow.appendChild(f);
+  }
+}
+
+// hide the floating mobile button once the form is on screen
+const mcta=document.getElementById("mcta");
+const ha=document.querySelector(".hero-actions"),jn=document.getElementById("join");
+ha.dataset.k="hero";jn.dataset.k="join";
+const seen={hero:true,join:false};
+const io=new IntersectionObserver(es=>{es.forEach(e=>seen[e.target.dataset.k]=e.isIntersecting);mcta.classList.toggle("off",seen.hero||seen.join)},{threshold:0});
+mcta.classList.add("off");io.observe(ha);io.observe(jn);
+</script>
+</body>
+</html>

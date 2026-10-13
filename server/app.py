@@ -301,6 +301,13 @@ def admin_page():
     return send_from_directory(PROJECT_ROOT, "admin.html")
 
 
+@app.get("/pass")
+@app.get("/pass/")
+def frost_list_page():
+    """Frost List pre-registration page (Lokamania 09)."""
+    return send_from_directory(PROJECT_ROOT, "pass.html")
+
+
 @app.get("/assets/<path:filename>")
 def assets(filename):
     return send_from_directory(PROJECT_ROOT / "assets", filename)
