@@ -85,6 +85,12 @@ if len(ADMIN_PASSWORD) < 12:
 
 PORT = int(os.environ.get("PORT", "5000"))
 
+# Maintenance mode: set MAINTENANCE_MODE=1 (Railway -> Variables) to show the
+# "website on hold" page (hold.html) on the home page and stop new applications.
+# /admin, its API and /pass keep working. Remove the variable to switch it off.
+MAINTENANCE_MODE = os.environ.get("MAINTENANCE_MODE", "").strip().lower() in (
+    "1", "true", "yes", "on")
+
 excel_file = Path(EXCEL_PATH)
 # Deliberately a warning, not a fatal error. On a brand new deployment the
 # volume at /data is empty until the real workbook is uploaded, and that upload
@@ -291,8 +297,23 @@ def serialize_records(records):
 
 
 # --------------------------------------------------------------------- site
+@app.before_request
+def _maintenance_block_new_applications():
+    """While on hold, refuse new applications (even from an old open tab)."""
+    if (MAINTENANCE_MODE and request.method == "POST"
+            and request.path.rstrip("/") == "/api/applications"):
+        return jsonify(
+            ok=False,
+            error=("Applications are closed while we prepare the next edition. "
+                   "Contact connect@mylokamania.com."),
+        ), 503
+    return None
+
+
 @app.get("/")
 def index():
+    if MAINTENANCE_MODE:
+        return send_from_directory(PROJECT_ROOT, "hold.html")
     return send_from_directory(PROJECT_ROOT, "index.html")
 
 
