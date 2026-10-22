@@ -10,6 +10,7 @@ import os
 import re
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -59,15 +60,30 @@ class Database:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.lock = threading.Lock()
+        # Standard rollback-journal mode (no WAL): no shared-memory side file,
+        # which failed with "disk I/O error" on the host's disk. At our volume
+        # (hundreds of rows) it is just as fast.
         with self._conn() as c:
+            mode = c.execute("PRAGMA journal_mode=DELETE").fetchone()[0]
             c.executescript(SCHEMA)
+        if str(mode).lower() != "delete":
+            raise RuntimeError(f"Could not switch the database to journal_mode=DELETE (got {mode})")
 
+    @contextmanager
     def _conn(self):
+        """One short-lived connection: commit on success, roll back on error, always close."""
         conn = sqlite3.connect(str(self.path), timeout=30)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA busy_timeout=30000")
-        return conn
+        try:
+            conn.execute("PRAGMA busy_timeout=30000")
+            conn.execute("PRAGMA synchronous=FULL")
+            yield conn
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     # ------------------------------------------------------------ writes
     def add(self, data):
@@ -179,14 +195,12 @@ class Database:
     def backup_to(self, dest):
         dest = Path(dest)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        src = self._conn()
-        try:
+        with self._conn() as src:
             out = sqlite3.connect(str(dest))
-            with out:
+            try:
                 src.backup(out)
-            out.close()
-        finally:
-            src.close()
+            finally:
+                out.close()
 
 
 # ----------------------------------------------------------- duplicates

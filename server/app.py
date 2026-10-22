@@ -483,6 +483,19 @@ def sync_now():
     return jsonify(ok=True)
 
 
+@app.errorhandler(Exception)
+def unexpected_error(exc):
+    """Answer API errors as JSON the admin page can show, and log them."""
+    from werkzeug.exceptions import HTTPException
+    if isinstance(exc, HTTPException):
+        return exc
+    log.exception("Unexpected error on %s", request.path)
+    if request.path.startswith("/api/"):
+        return jsonify(ok=False, error="The server hit an error reading the database. "
+                                       "Please try again in a minute; if it keeps happening, check the server logs."), 500
+    return "Something went wrong. Please try again in a minute.", 500
+
+
 @app.errorhandler(401)
 def unauthorized(_error):
     return jsonify(ok=False, error="Your session has ended. Please sign in again."), 401
