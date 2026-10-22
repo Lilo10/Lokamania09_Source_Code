@@ -1,14 +1,8 @@
-# Dependencies for the Lokamania 09 site.
+# Dependencies for the Lokamania 10 site.
 #
-# This list is intentionally complete and self-contained. It used to say
-# "-r server/requirements.txt", but the build then depended on a file in a
-# subfolder being uploaded correctly; when that failed the build stopped with
-# "No such file or directory: /app/server/requirements.txt". Keeping everything
-# here means the install step only ever needs this one file.
-#
-# server/requirements.txt points back at this file, so there is still only one
-# place to change when a dependency is added.
+# This list is intentionally complete and self-contained (hosts only look at the
+# root requirements.txt). server/requirements.txt points back at this file.
 
 flask>=3.1
-openpyxl>=3.1
 gunicorn>=22.0
+tzdata>=2024.1      # Cairo time zone data, for the November 12 deadline

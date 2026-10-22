@@ -1,153 +1,62 @@
-# Lokamania 09 — Website with Excel-backed database
+# Lokamania 10 — website, admin and Google Sheet
 
-Website + admin for the Lokamania 09 Winter Edition brand applications (6–7 November 2026, U Venues).
+Black Friday edition · November 26–28 · Majarrah, Sheikh Zayed · applications close November 12, 11:59 pm Cairo time.
 
 ## How it works
 
 ```
-Browser                                                     Server (Flask)
-├─ index.html   ──POST /api/applications──▶  validate → generate LM09-XXXX → save
-├─ /admin       ──GET  /api/applications──▶  read applications list
-│               ──PATCH/api/applications/<ref>──▶ update status / payment / notes
-│               ──GET  /api/stats──────────▶  live dashboard counts
-└─ (same origin, no CORS needed)              │
-                                              ▼
-                              Lokamania_09_Brand_Applications_FINAL.xlsx
-                                   (the database — OneDrive)
+Applicant ── index.html ──POST /api/applications──▶ Flask server (Railway)
+                                                     │ saves to SQLite (the master copy)
+Admin ────── /admin ──────login, list, edit, bulk──▶ │
+                                                     ▼ background sync (seconds; full refresh every 15 min)
+                                     Google Apps Script web app ──▶ Lokamania 10 Google Sheet
+                                                                    Dashboard · Applications · one tab per category
 ```
 
-- The **Applications sheet** in the workbook is the database. Every submission becomes one row
-  (reference `LM09-0001`, timestamps, statuses), with automatic defaults from the **Settings**
-  sheet (Application Status → `New`, Payment Status → the first option).
-- The **Dashboard sheet** formulas count the new rows automatically (rows 7–1006 are pre-configured
-  and counted).
-- Editing the **Settings** sheet (categories, spaces, statuses…) updates what the server validates —
-  Excel stays the single source of truth.
-- **Backups**: a timestamped backup of the workbook is created automatically before the first write
-  each time the server starts (in `backups/` inside the Lokamania Website folder).
+* The **database** (`DATABASE_PATH`, on Railway `/data/lokamania10.db`) is the master copy. A copy is
+  written to `backups/` next to it once a day; 30 days are kept.
+* The **Google Sheet** is a read-only mirror. Its tabs are protected; edit applications in `/admin`.
+  If Google is slow or down, nothing is lost: changes queue up and are retried automatically.
+* Categories, spaces, days, statuses and the deadline live in `server/lm10_config.py`.
+  The form in `index.html` offers the same choices.
 
-## Run it
+## Railway variables
 
-Requires Python 3.9+ (already on this Mac). No Node.js needed.
+| Variable | Value |
+|---|---|
+| `ADMIN_PASSWORD` | the shared admin password (unchanged from Lokamania 09) |
+| `DATABASE_PATH` | `/data/lokamania10.db` |
+| `SHEET_WEBAPP_URL` | the Apps Script web app link (ends in `/exec`) |
+| `SHEET_SECRET` | the secret code, identical to `SECRET` in the Apps Script |
+| `MAINTENANCE_MODE` | `1` shows the "website on hold" page; remove it to go live |
+| `PREVIEW_KEY` | optional: open `https://mylokamania.com/?preview=<key>` to see the real site while on hold |
+| `APPLICATIONS_CLOSE_AT` | optional override, e.g. `2026-11-12T23:59:59` (Cairo time) |
 
-```bash
-./server/run.sh        # first run creates server/.venv and installs dependencies
-```
+## Google Sheet script
 
-Then open:
+`google-sheet/Code.gs` goes into the Sheet under **Extensions → Apps Script**. Set `SECRET`, then
+**Deploy → New deployment → Web app**, Execute as **Me**, Who has access **Anyone**. After changing the
+script: **Deploy → Manage deployments → Edit → New version** (the link stays the same).
 
-| Page | URL | Access |
-|---|---|---|
-| Public site | http://127.0.0.1:5000 | Everyone |
-| Admin | http://127.0.0.1:5000/admin | Password from `.env` |
-
-## Admin password (`.env`)
-
-The admin password lives in the **`.env`** file in the project root (already created for you).
-The server loads it automatically on startup, and it is **ignored by git** — never commit it.
-
-Change it by editing `.env`, or as an environment variable (env vars always win over `.env`):
-
-```bash
-ADMIN_PASSWORD="your-strong-password" ./server/run.sh
-```
-
-Supported values in `.env`: `ADMIN_PASSWORD`, `EXCEL_PATH` (path to the workbook), `PORT`.
-
-## Admin security
-
-- The admin page authenticates with a **short-lived token kept in memory only** — a page refresh
-  or a server restart signs you out automatically, so you must enter the password again. This is
-  intentional: it helps if the admin page is left open on a shared machine.
-
-## Files
-
-- `index.html` — public site with the live application form (posts to the server)
-- `admin.html` — password-protected admin: review applications, update status/payment, notes
-- `server/app.py` — Flask app (site + admin + API)
-- `server/excel_db.py` — workbook read/write, references, locks, atomic saves, backups
-- `server/requirements.txt`, `server/run.sh`
-- `assets/` — logo and event artwork
-
-## ⚠️ Excel / OneDrive notes (important)
-
-- **Close the workbook in Excel/OneDrive while the server is running.** If Excel has the file open,
-  it can overwrite what the server wrote (and vice-versa). The server refuses to write while Excel's
-  lock file (`~$…xlsx`) is present and returns a friendly error instead of clobbering your data —
-  so if you see that error, close Excel and retry.
-- The server reloads the workbook from disk for every read/write, so edits made in Excel (while the
-  server is stopped) are picked up automatically the next time it runs.
-- OneDrive syncs the file in the background; give it a moment after big edit sessions.
-
-## Testing
+## Run it on your Mac
 
 ```bash
 ./server/run.sh
-# then, in another terminal:
-curl -s http://127.0.0.1:5000/api/health
 ```
 
-Submit a test application through the site, then sign in to `/admin` and update its status —
-the change lands in the Applications sheet. You can also delete test rows directly in Excel
-(remove the row, the table and Dashboard adjust).
+Then open http://127.0.0.1:5000 and http://127.0.0.1:5000/admin. Locally the database is
+`local-data/lokamania10.db` unless `DATABASE_PATH` is set in `.env`.
 
-## Hosting
+## Files
 
-This version needs a real server — GitHub Pages cannot host it (it only serves static files).
-Everything needed to launch on a VPS is in **`deploy/`**:
+* `index.html` — public site and application form (shows "Applications are closed" after the deadline)
+* `admin.html` — admin page: status counts, breakdowns, search, filters, bulk status change, notes, delete
+* `hold.html` — "website on hold" page used while `MAINTENANCE_MODE=1`
+* `pass.html` — Frost List page (unchanged)
+* `server/app.py` — web server and API · `server/db.py` — database · `server/sheet_sync.py` — Sheet mirror
+* `server/lm10_config.py` — form choices and deadline · `assets/lm10/` — Lokamania 10 artwork
+* `google-sheet/Code.gs` — the Apps Script for the Sheet
 
-| File | Runs on | What it does |
-|---|---|---|
-| `deploy/upload.sh` | your Mac | rsyncs the code + workbook, then runs setup |
-| `deploy/setup.sh` | the server | installs Caddy, gunicorn, the systemd service, firewall, daily backups |
-| `deploy/Caddyfile` | the server | reverse proxy + automatic HTTPS |
-| `deploy/lokamania.service` | the server | starts the app on boot and restarts it if it crashes |
-| `deploy/backup.sh` | the server | nightly snapshot of the workbook (30-day history) |
-| `deploy/fetch-workbook.sh` | your Mac | downloads the live workbook to look at in Excel |
-
-### Going live
-
-```bash
-# 1. From the project folder, once the server has an IP address:
-./deploy/upload.sh root@YOUR_SERVER_IP
-
-# 2. Point your domain at the server — one DNS "A" record:
-#    mylokamania.com      A   YOUR_SERVER_IP
-
-# 3. Check it is healthy:
-ssh root@YOUR_SERVER_IP 'systemctl status lokamania --no-pager'
-ssh root@YOUR_SERVER_IP 'curl -s http://127.0.0.1:8000/api/health'
-```
-
-Later, to push code changes without touching the data:
-
-```bash
-./deploy/upload.sh --code-only
-```
-
-### How it is laid out on the server
-
-```
-/opt/lokamania/          code (rsync'd from this repo)
-/srv/lokamania-data/     the workbook + backups  ← the only writable folder
-etc/caddy/Caddyfile      HTTPS + reverse proxy
-etc/systemd/system/lokamania.service
-```
-
-The workbook is deliberately **outside** the web root, so it can never be downloaded over HTTP.
-gunicorn runs as an unprivileged user (`lokamania`) on `127.0.0.1:8000` — that port is not reachable
-from the internet; Caddy is the only thing that can talk to it.
-
-### Important once it is live
-
-- **The server holds the master workbook.** Do not edit the OneDrive copy and expect it to appear.
-  Use `./deploy/fetch-workbook.sh` to pull a read-only copy, and close it in Excel when done.
-- The admin password is copied to the server's `/opt/lokamania/.env`. Change it there if you change
-  it here, or re-run `./deploy/upload.sh --no-setup` after editing.
-- Backups run at 03:17 and are kept 30 days in `/srv/lokamania-data/backups/`.
-
-## Original Google Form
-
-The previous version embedded a Google Form. It is now replaced by this self-hosted form + Excel
-database. The Google Form's old response spreadsheet can still be exported and imported into the
-same workbook if you want to merge historical data.
+Lokamania 09's data was exported to `Lokamania09_FINAL_EXPORT_2026-10-21.xlsx`; the 09 workbook also
+remains untouched on the Railway volume. `server/excel_db.py`, `make_plan.py` and `deploy/vps/` are
+Lokamania 09 leftovers and are no longer used.

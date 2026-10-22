@@ -1,28 +1,37 @@
-"""Lokamania 09 — Flask server.
+"""Lokamania 10: Flask server.
 
-Serves the public site, the admin page, and a small JSON API that reads and
-writes the Lokamania Excel workbook (the database).
+Serves the public site, the admin page and a small JSON API. Applications are
+stored in a SQLite database (the master copy) and mirrored one way to the
+Lokamania 10 Google Sheet.
 
 Environment variables:
-  EXCEL_PATH      path to the workbook (default: the OneDrive workbook)
-  ADMIN_PASSWORD  password for /admin (default: lokamania-admin)
-  SECRET_KEY      Flask session key (default: dev value — change for anything public)
-  PORT            port to listen on (default: 5000)
+  ADMIN_PASSWORD         password for /admin (required, 12+ characters)
+  DATABASE_PATH          SQLite file (Railway: /data/lokamania10.db)
+  SHEET_WEBAPP_URL       Apps Script web app link (…/exec); empty = no Sheet sync
+  SHEET_SECRET           secret code shared with the Apps Script
+  MAINTENANCE_MODE       1 = show the "website on hold" page and stop applications
+  PREVIEW_KEY            lets the team open the real site while on hold: /?preview=<key>
+  APPLICATIONS_CLOSE_AT  deadline in Cairo time (default 2026-11-12T23:59:59)
+  BACKUP_DIR             where nightly database backups go (default: next to the database)
+  PORT                   port to listen on (default: 5000)
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import secrets
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from flask import Flask, abort, jsonify, request, send_from_directory
+from flask import Flask, Response, abort, jsonify, request, send_from_directory
 
-from excel_db import ExcelDatabase, ExcelWriteRefused
+import lm10_config as cfg
+from db import Database, find_duplicates
+from sheet_sync import SheetSync
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -48,12 +57,6 @@ _load_env(PROJECT_ROOT / ".env")
 
 
 def _required_env(name, *, hint):
-    """Read a mandatory setting or stop the server with a clear message.
-
-    There are deliberately no default values here. A silently wrong default is
-    much worse than not starting: a guessed admin password would be guessable by
-    anyone, and a guessed workbook path would look like an empty database.
-    """
     value = os.environ.get(name, "").strip()
     if not value:
         raise SystemExit(
@@ -66,85 +69,100 @@ def _required_env(name, *, hint):
     return value
 
 
-EXCEL_PATH = _required_env(
-    "EXCEL_PATH",
-    hint="It must point at Lokamania_09_Brand_Applications_FINAL.xlsx "
-         "(on Railway this is normally /data/Lokamania_09_Brand_Applications_FINAL.xlsx).",
-)
-ADMIN_PASSWORD = _required_env(
-    "ADMIN_PASSWORD",
-    hint="Use a long random password, not a memorable one.",
-)
-# Refuse an obviously weak password rather than quietly protecting the admin
-# page with it.
+def _flag(name):
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+ADMIN_PASSWORD = _required_env("ADMIN_PASSWORD", hint="Use a long random password.")
 if len(ADMIN_PASSWORD) < 12:
-    raise SystemExit(
-        "\nERROR: ADMIN_PASSWORD is too short (minimum 12 characters).\n"
-        "       Please choose a longer one.\n"
-    )
+    raise SystemExit("\nERROR: ADMIN_PASSWORD is too short (minimum 12 characters).\n")
 
+DATABASE_PATH = os.environ.get("DATABASE_PATH", "").strip() or str(
+    PROJECT_ROOT / "local-data" / "lokamania10.db")
 PORT = int(os.environ.get("PORT", "5000"))
+MAINTENANCE_MODE = _flag("MAINTENANCE_MODE")
+PREVIEW_KEY = os.environ.get("PREVIEW_KEY", "").strip()
+PREVIEW_COOKIE = "lm_preview"
 
-# Maintenance mode: set MAINTENANCE_MODE=1 (Railway -> Variables) to show the
-# "website on hold" page (hold.html) on the home page and stop new applications.
-# /admin, its API and /pass keep working. Remove the variable to switch it off.
-MAINTENANCE_MODE = os.environ.get("MAINTENANCE_MODE", "").strip().lower() in (
-    "1", "true", "yes", "on")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger("lokamania")
 
-excel_file = Path(EXCEL_PATH)
-# Deliberately a warning, not a fatal error. On a brand new deployment the
-# volume at /data is empty until the real workbook is uploaded, and that upload
-# needs `railway ssh` into this very container. Refusing to boot would make the
-# service unreachable and the workbook impossible to put there: a catch-22 with
-# no exit. So the server starts, stays reachable, and every endpoint that needs
-# the workbook answers with a clear 503 instead.
-WORKBOOK_MISSING = not excel_file.exists()
 
-db = ExcelDatabase(EXCEL_PATH)
+# ------------------------------------------------------------------ time
+try:
+    from zoneinfo import ZoneInfo
+    CAIRO = ZoneInfo("Africa/Cairo")
+except Exception:  # no time-zone data on this machine: Egypt in November is UTC+2
+    CAIRO = timezone(timedelta(hours=2))
+    log.warning("Time-zone data not found; using UTC+2 for Cairo.")
+
+
+def to_cairo(iso):
+    """'2026-10-22T10:05:00+00:00' -> '2026-10-22 13:05' (Cairo)."""
+    if not iso:
+        return ""
+    try:
+        return datetime.fromisoformat(iso).astimezone(CAIRO).strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return iso
+
+
+def _close_at():
+    raw = os.environ.get("APPLICATIONS_CLOSE_AT", "").strip() or cfg.DEFAULT_CLOSE_AT
+    dt = datetime.fromisoformat(raw)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=CAIRO)
+    return dt
+
+
+CLOSE_AT = _close_at()
+
+
+def applications_open():
+    return datetime.now(timezone.utc) <= CLOSE_AT
+
+
+# ------------------------------------------------------------- database
+db = Database(DATABASE_PATH)
+sync = SheetSync(db, os.environ.get("SHEET_WEBAPP_URL"), os.environ.get("SHEET_SECRET"),
+                 to_cairo, log)
+sync.start()
+
 app = Flask(__name__, static_folder=None)
 
 
-def require_workbook():
-    """Stop a data request cleanly when the workbook has not been uploaded yet."""
-    if WORKBOOK_MISSING:
-        return jsonify(
-            ok=False,
-            error=(f"The database is not set up yet: no workbook was found at "
-                   f"{EXCEL_PATH}. Upload {excel_file.name} to that location, "
-                   f"then reload this page."),
-        ), 503
-    return None
+def _backup_loop():
+    """Copy the database once a day; keep 30 days of copies."""
+    backup_dir = Path(os.environ.get("BACKUP_DIR", "").strip()
+                      or Path(DATABASE_PATH).parent / "backups")
+    while True:
+        try:
+            stamp = datetime.now(CAIRO).strftime("%Y%m%d")
+            dest = backup_dir / f"lokamania10_{stamp}.db"
+            if not dest.exists():
+                db.backup_to(dest)
+                log.info("Database backup written: %s", dest)
+            copies = sorted(backup_dir.glob("lokamania10_*.db"))
+            for old in copies[:-30]:
+                old.unlink()
+        except Exception:
+            log.exception("Database backup failed")
+        time.sleep(6 * 60 * 60)
 
 
-@app.before_request
-def _block_when_no_workbook():
-    """Serve the pages, but refuse data requests until the workbook is there.
+threading.Thread(target=_backup_loop, name="backup", daemon=True).start()
 
-    The site and admin page still load on purpose: they are how you find out
-    what is wrong, and how you confirm the fix once the file is uploaded.
-    """
-    if not WORKBOOK_MISSING:
-        return None
-    if request.path.startswith(("/api/applications", "/api/stats")):
-        return require_workbook()
-    return None
 
-# Admin authentication uses short-lived bearer tokens kept in memory.
-# There is no persistent cookie: as soon as the page is refreshed or the
-# server restarts the token is gone, so the admin user must sign in again.
-TOKEN_TTL_SECONDS = 60 * 60  # sliding 1-hour expiry
-ADMIN_TOKENS = {}            # token -> absolute expiry (time.monotonic)
-
-# Brute-force protection for the login endpoint. Without this, /admin is a free
-# password oracle: unlimited guesses against a single shared secret.
-LOGIN_MAX_ATTEMPTS = 5            # wrong tries before the door is shut
-LOGIN_LOCKOUT_SECONDS = 15 * 60   # how long the lockout lasts
-LOGIN_ATTEMPTS = {}               # client key -> [count, locked_until]
+# --------------------------------------------------------- admin login
+TOKEN_TTL_SECONDS = 60 * 60
+ADMIN_TOKENS = {}
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_LOCKOUT_SECONDS = 15 * 60
+LOGIN_ATTEMPTS = {}
 LOGIN_LOCK = threading.Lock()
 
 
 def _client_key():
-    """Identify the caller. Falls back to a shared bucket if no IP is known."""
     forwarded = request.headers.get("X-Forwarded-For", "")
     if forwarded:
         return forwarded.split(",")[0].strip()
@@ -152,17 +170,13 @@ def _client_key():
 
 
 def _login_locked_out(key):
-    """Seconds left on a lockout, or 0 if this caller is allowed to try."""
     with LOGIN_LOCK:
         entry = LOGIN_ATTEMPTS.get(key)
-        if not entry:
+        if not entry or not entry[1]:
             return 0
-        _count, locked_until = entry
-        if not locked_until:
-            return 0  # has failed tries, but is not currently locked
-        remaining = locked_until - time.monotonic()
+        remaining = entry[1] - time.monotonic()
         if remaining <= 0:
-            LOGIN_ATTEMPTS.pop(key, None)  # lockout has now expired
+            LOGIN_ATTEMPTS.pop(key, None)
             return 0
         return int(remaining) + 1
 
@@ -175,146 +189,150 @@ def _record_login_failure(key):
         if count >= LOGIN_MAX_ATTEMPTS:
             locked_until = time.monotonic() + LOGIN_LOCKOUT_SECONDS
         LOGIN_ATTEMPTS[key] = [count, locked_until]
-        if count >= LOGIN_MAX_ATTEMPTS:
-            return int(LOGIN_LOCKOUT_SECONDS) + 1
         return LOGIN_MAX_ATTEMPTS - count
 
 
-def _clear_login_failures(key):
-    with LOGIN_LOCK:
-        LOGIN_ATTEMPTS.pop(key, None)
+def require_admin():
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else ""
+    expiry = ADMIN_TOKENS.get(token)
+    now = time.monotonic()
+    if expiry is None or now > expiry:
+        ADMIN_TOKENS.pop(token, None)
+        abort(401)
+    ADMIN_TOKENS[token] = now + TOKEN_TTL_SECONDS
 
+
+# ------------------------------------------------------------ helpers
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-
-# Form values (used by index.html) -> labels stored in the Excel workbook.
-# Labels match the Settings sheet exactly.
-CATEGORY_LABELS = {
-    "fashion": "Fashion—Clothing",
-    "beauty": "Beauty",
-    "accessories": "Fashion Accessories",
-    "home": "Home & Lifestyle",
-    "food": "Food & Beverages",
-    "art": "Art & Stationery",
-    "other": "Other",
-}
-SPACES_BY_CATEGORY = {
-    "fashion": ["Small Booth", "Large Booth"],
-    "beauty": ["Kiosk"],
-    "accessories": ["Kiosk", "Small Booth"],
-    "home": ["Kiosk"],
-    "food": ["Kiosk"],
-    "art": ["Kiosk"],
-    "other": ["Reviewed individually"],
-}
-DAYS_LABELS = {
-    "both": "Both days",
-    "6": "6 November 2026 only",
-    "7": "7 November 2026 only",
-}
+CONTACT_EMAIL = "connect@mylokamania.com"
 
 
-# --------------------------------------------------------------------- utils
-def validate_application(payload, settings):
-    """Return a list of human-readable problems (empty means valid)."""
+def _has_preview():
+    return bool(PREVIEW_KEY) and secrets.compare_digest(
+        request.cookies.get(PREVIEW_COOKIE, ""), PREVIEW_KEY)
+
+
+def validate(payload):
+    """Return (clean data, list of problems)."""
     errors = []
 
-    def text(key):
-        value = payload.get(key)
-        return value.strip() if isinstance(value, str) else ""
+    def text(key, limit=2000):
+        v = payload.get(key)
+        return v.strip()[:limit] if isinstance(v, str) else ""
 
-    if not text("brand"):
-        errors.append("Brand name is required")
+    d = {}
+    d["brand"] = text("brand", 200) or errors.append("Brand name is required")
     try:
         year = int(text("launchYear") or 0)
-        if not 1900 <= year <= 2026:
-            errors.append("Brand launch year must be between 1900 and 2026")
+        if not 1900 <= year <= datetime.now().year:
+            raise ValueError
+        d["launch_year"] = year
     except ValueError:
-        errors.append("Brand launch year must be a number")
-
-    if text("registration") not in settings["registration"]:
-        errors.append("Commercial registration status is invalid")
-
-    contact = text("contact")
-    if not contact:
-        errors.append("Contact person — full name is required")
-    elif len(contact) < 3 or not re.search(r"\s", contact):
-        errors.append("Please enter both first and last name")
-
-    if not text("phone"):
-        errors.append("Phone / WhatsApp is required")
-    if not EMAIL_RE.match(text("email")):
+        errors.append(f"Brand launch year must be a year between 1900 and {datetime.now().year}")
+    d["registration"] = text("registration")
+    if d["registration"] not in cfg.REGISTRATION:
+        errors.append("Please choose your commercial registration status")
+    d["contact"] = text("contact", 200)
+    if not d["contact"]:
+        errors.append("Contact person full name is required")
+    elif not re.search(r"\S\s+\S", d["contact"]):
+        errors.append("Please enter the contact person's first and last name")
+    d["phone"] = text("phone", 40)
+    if len(re.sub(r"\D", "", d["phone"])) < 8:
+        errors.append("A valid phone / WhatsApp number is required")
+    d["email"] = text("email", 200)
+    if not EMAIL_RE.match(d["email"]):
         errors.append("A valid email address is required")
-    if not text("instagram"):
+    d["instagram"] = text("instagram", 200)
+    if not d["instagram"]:
         errors.append("Instagram is required")
-
-    website = text("website")
-    # Website is optional: plenty of brands do not have one, so a blank value is
-    # accepted. When something *is* typed, only check that it plausibly is a
-    # link. Deliberately not strict about the scheme, because applicants paste
-    # "brand.com" and "instagram.com/brand" into this box far more often than a
-    # bare https:// URL, and a rejected submission is worse than an untidy cell
-    # in Excel that the admin can tidy later.
-    if website and not re.match(r"^[^\s@]+\.[^\s@]{2,}", website):
+    d["website"] = text("website", 300)
+    if d["website"] and not re.match(r"^[^\s@]+\.[^\s@]{2,}", d["website"]):
         errors.append("Website should look like a link, e.g. brand.com")
-    if not text("aboutBrand"):
+    d["about"] = text("about")
+    if not d["about"]:
         errors.append("About the brand is required")
 
-    category_key = payload.get("category")
-    category_label = CATEGORY_LABELS.get(category_key)
-    if not category_label:
-        errors.append("Please choose a valid main category")
+    cat = payload.get("category")
+    if cat not in cfg.CATEGORIES:
+        errors.append("Please choose a main category")
     else:
-        sub = text("subcategory") or text("otherCategory")
-        if not sub:
-            errors.append("Subcategory is required")
-        booth = text("booth")
-        allowed = SPACES_BY_CATEGORY.get(category_key, [])
-        if not booth:
-            errors.append("Available space is required")
-        elif allowed and booth not in allowed:
-            errors.append(f"Space must be one of: {', '.join(allowed)}")
+        d["category_key"], d["category"] = cat, cfg.CATEGORIES[cat]
+        if cat == "other":
+            d["subcategory"] = text("otherCategory", 200)
+            if not d["subcategory"]:
+                errors.append("Please describe your category")
+        else:
+            d["subcategory"] = text("subcategory", 200)
+            if d["subcategory"] not in cfg.SUBCATEGORIES[cat]:
+                errors.append("Please choose a subcategory")
+        space = payload.get("space")
+        if space not in cfg.SPACES_BY_CATEGORY[cat]:
+            errors.append("Please choose a space available for your category")
+        else:
+            d["space_key"], d["space"] = space, cfg.SPACES[space]
 
-    if payload.get("days") not in DAYS_LABELS:
+    days = payload.get("days")
+    if days not in cfg.DAYS:
         errors.append("Please choose your participation days")
-    if not text("products"):
+    else:
+        d["days_key"], d["days"] = days, cfg.DAYS[days]
+
+    d["products"] = text("products")
+    if not d["products"]:
         errors.append("Products you plan to sell are required")
-    if not text("prices"):
-        errors.append("Typical price range is required")
-    if not text("winter"):
-        errors.append("Winter collection description is required")
-    if text("joined") not in settings["joined"]:
-        errors.append("Previous participation answer is invalid")
-
-    return errors
-
-
-def serialize_records(records):
-    """JSON-safe copy of a record (datetimes are already ISO strings)."""
-    return [
-        {k: v for k, v in record.items() if k != "row"}
-        for record in records
-    ]
+    d["drop_offer"] = text("dropOffer")
+    if not d["drop_offer"]:
+        errors.append("Please describe your Black Friday drop and/or offer")
+    d["price_range"] = text("priceRange")
+    if d["price_range"] not in cfg.PRICE_RANGES:
+        errors.append("Please choose a typical price range")
+    d["joined"] = text("joined")
+    if d["joined"] not in cfg.JOINED:
+        errors.append("Please tell us if you've joined Lokamania before")
+    if payload.get("confirmAccurate") is not True or payload.get("agreeContact") is not True:
+        errors.append("Please tick both confirmation boxes")
+    return d, errors
 
 
-# --------------------------------------------------------------------- site
+def public_record(r, dups):
+    out = {k: v for k, v in r.items() if k not in ("seq", "version", "synced_version")}
+    out["submitted_cairo"] = to_cairo(r.get("submitted_at"))
+    out["updated_cairo"] = to_cairo(r.get("last_updated"))
+    out["duplicates"] = dups.get(r["reference"], [])
+    return out
+
+
+# --------------------------------------------------------------- pages
 @app.before_request
-def _maintenance_block_new_applications():
-    """While on hold, refuse new applications (even from an old open tab)."""
+def _gatekeeper():
+    """While on hold, refuse new applications unless the team preview is on."""
     if (MAINTENANCE_MODE and request.method == "POST"
-            and request.path.rstrip("/") == "/api/applications"):
-        return jsonify(
-            ok=False,
-            error=("Applications are closed while we prepare the next edition. "
-                   "Contact connect@mylokamania.com."),
-        ), 503
+            and request.path.rstrip("/") == "/api/applications" and not _has_preview()):
+        return jsonify(ok=False, error=f"Applications are paused right now. Contact {CONTACT_EMAIL}."), 503
     return None
+
+
+def _index_page():
+    html = (PROJECT_ROOT / "index.html").read_text(encoding="utf-8")
+    if not applications_open():
+        html = html.replace('data-apply="open"', 'data-apply="closed"', 1)
+    return Response(html, mimetype="text/html")
 
 
 @app.get("/")
 def index():
+    key = request.args.get("preview", "")
     if MAINTENANCE_MODE:
-        return send_from_directory(PROJECT_ROOT, "hold.html")
-    return send_from_directory(PROJECT_ROOT, "index.html")
+        if PREVIEW_KEY and key and secrets.compare_digest(key, PREVIEW_KEY):
+            resp = _index_page()
+            resp.set_cookie(PREVIEW_COOKIE, PREVIEW_KEY, max_age=12 * 3600,
+                            httponly=True, samesite="Lax", secure=request.is_secure)
+            return resp
+        if not _has_preview():
+            return send_from_directory(PROJECT_ROOT, "hold.html")
+    return _index_page()
 
 
 @app.get("/admin")
@@ -325,7 +343,7 @@ def admin_page():
 @app.get("/pass")
 @app.get("/pass/")
 def frost_list_page():
-    """Frost List pre-registration page (Lokamania 09)."""
+    """Frost List pre-registration page (unchanged)."""
     return send_from_directory(PROJECT_ROOT, "pass.html")
 
 
@@ -334,109 +352,53 @@ def assets(filename):
     return send_from_directory(PROJECT_ROOT / "assets", filename)
 
 
-# ----------------------------------------------------------------- endpoints
+@app.get("/favicon.ico")
+def favicon():
+    return send_from_directory(PROJECT_ROOT / "assets" / "lm10", "favicon.png")
+
+
+# ------------------------------------------------------------ public API
 @app.get("/api/health")
 def health():
-    # Always 200 while the process is alive, even with no workbook. Railway uses
-    # this to decide whether the container is healthy, and the container has to
-    # stay healthy so that `railway ssh` can still reach it to upload the file.
-    return jsonify(
-        ok=True,
-        time=datetime.now().isoformat(timespec="seconds"),
-        workbook="ready" if not WORKBOOK_MISSING else "not uploaded yet",
-    )
+    return jsonify(ok=True, time=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                   applications_open=applications_open(), maintenance=MAINTENANCE_MODE,
+                   sheet_sync=sync.state["configured"])
 
 
 @app.post("/api/applications")
 def create_application():
+    if not applications_open():
+        return jsonify(ok=False, error=f"Applications closed on November 12. Contact {CONTACT_EMAIL}."), 403
     payload = request.get_json(silent=True) or {}
-    settings = db.settings()
-    errors = validate_application(payload, settings)
+    if payload.get("company"):  # hidden field only bots fill in
+        return jsonify(ok=True, reference="LM10-0000"), 201
+    data, errors = validate(payload)
     if errors:
-        return jsonify(ok=False, error="; ".join(errors), fields=errors), 400
-
-    row_data = {
-        "brand": payload.get("brand", "").strip(),
-        "launch_year": int(payload.get("launchYear")),
-        "registration": payload.get("registration"),
-        "contact": payload.get("contact", "").strip(),
-        "phone": payload.get("phone", "").strip(),
-        "email": payload.get("email", "").strip(),
-        "instagram": payload.get("instagram", "").strip(),
-        "website": payload.get("website", "").strip(),
-        "about_brand": payload.get("aboutBrand", "").strip(),
-        "category": CATEGORY_LABELS[payload.get("category")],
-        "subcategory": (payload.get("subcategory") or "").strip()
-        or (payload.get("otherCategory") or "").strip(),
-        "days": DAYS_LABELS[payload.get("days")],
-        "booth": payload.get("booth", "").strip(),
-        "products": payload.get("products", "").strip(),
-        "prices": payload.get("prices", "").strip(),
-        "winter": payload.get("winter", "").strip(),
-        "exclusive": payload.get("exclusive", "").strip(),
-        "joined": payload.get("joined", "").strip(),
-        "status": settings["default_status"],
-        "payment": settings["default_payment"],
-    }
+        return jsonify(ok=False, error=errors[0], fields=errors), 400
     try:
-        reference = db.append_application(row_data)
-    except ExcelWriteRefused as exc:
-        return jsonify(ok=False, error=str(exc)), 503
+        reference = db.add(data)
     except Exception:
-        app.logger.exception("create_application failed")
-        return jsonify(ok=False, error="Internal error saving application"), 500
-    return jsonify(
-        ok=True,
-        reference=reference,
-        submitted_at=datetime.now().isoformat(timespec="seconds"),
-    ), 201
+        log.exception("Saving an application failed")
+        return jsonify(ok=False, error="We couldn't save your application. Please try again in a moment."), 500
+    sync.nudge()
+    return jsonify(ok=True, reference=reference), 201
 
 
-def require_admin():
-    auth = request.headers.get("Authorization", "")
-    token = auth[7:] if auth.startswith("Bearer ") else ""
-    expiry = ADMIN_TOKENS.get(token)
-    now = time.monotonic()
-    if expiry is None:
-        abort(401)
-    if now > expiry:
-        ADMIN_TOKENS.pop(token, None)
-        abort(401)
-    ADMIN_TOKENS[token] = now + TOKEN_TTL_SECONDS  # sliding expiry
-
-
+# ------------------------------------------------------------- admin API
 @app.post("/api/auth/login")
 def login():
     key = _client_key()
-
-    # Already locked out? Reject without even looking at the password.
     locked_for = _login_locked_out(key)
     if locked_for:
-        return jsonify(
-            ok=False,
-            error=(f"Too many failed sign-in attempts. Try again in "
-                   f"{locked_for // 60} minute(s)."),
-        ), 429
-
+        return jsonify(ok=False, error=f"Too many failed sign-in attempts. Try again in {locked_for // 60 + 1} minute(s)."), 429
     payload = request.get_json(silent=True) or {}
-    if not secrets.compare_digest(
-        str(payload.get("password") or ""), ADMIN_PASSWORD
-    ):
-        tries_left = _record_login_failure(key)
-        if tries_left > LOGIN_MAX_ATTEMPTS:
-            minutes = (tries_left - 1) // 60 + 1
-            return jsonify(
-                ok=False,
-                error=(f"Too many failed sign-in attempts. This address is "
-                       f"locked for {minutes} minute(s)."),
-            ), 429
-        return jsonify(
-            ok=False,
-            error=(f"Wrong password. {tries_left} attempt(s) left before "
-                   f"this address is locked out."),
-        ), 401
-
-    _clear_login_failures(key)
+    if not secrets.compare_digest(str(payload.get("password") or ""), ADMIN_PASSWORD):
+        left = _record_login_failure(key)
+        if left <= 0:
+            return jsonify(ok=False, error="Too many failed sign-in attempts. This address is locked for 15 minutes."), 429
+        return jsonify(ok=False, error=f"Wrong password. {left} attempt(s) left before a 15-minute lock."), 401
+    with LOGIN_LOCK:
+        LOGIN_ATTEMPTS.pop(key, None)
     token = secrets.token_urlsafe(32)
     ADMIN_TOKENS[token] = time.monotonic() + TOKEN_TTL_SECONDS
     return jsonify(ok=True, token=token)
@@ -445,37 +407,22 @@ def login():
 @app.post("/api/auth/logout")
 def logout():
     auth = request.headers.get("Authorization", "")
-    token = auth[7:] if auth.startswith("Bearer ") else ""
-    ADMIN_TOKENS.pop(token, None)
+    ADMIN_TOKENS.pop(auth[7:] if auth.startswith("Bearer ") else "", None)
     return jsonify(ok=True)
 
 
 @app.get("/api/applications")
 def list_applications():
     require_admin()
-    settings = db.settings()
-    status = request.args.get("status", "").strip()
-    payment = request.args.get("payment", "").strip()
-    query = request.args.get("q", "").strip().lower()
-
-    records = db.list_applications()
-    if status and status != "all":
-        records = [r for r in records if r.get("status") == status]
-    if payment and payment != "all":
-        records = [r for r in records if r.get("payment") == payment]
-    if query:
-        def haystack(r):
-            return " ".join(
-                str(r.get(k) or "")
-                for k in ("reference", "brand", "contact", "email", "instagram")
-            ).lower()
-        records = [r for r in records if query in haystack(r)]
-
+    records = db.all()
+    dups = find_duplicates(records)
     return jsonify(
         ok=True,
-        applications=serialize_records(records),
-        status_options=settings["statuses"],
-        payment_options=settings["payments"],
+        applications=[public_record(r, dups) for r in records],
+        options={"statuses": cfg.STATUSES, "categories": list(cfg.CATEGORIES.values()),
+                 "days": list(cfg.DAYS.values()), "spaces": list(cfg.SPACES.values())},
+        deadline=CLOSE_AT.astimezone(CAIRO).strftime("%B %d, %I:%M %p").replace(" 0", " "),
+        applications_open=applications_open(),
     )
 
 
@@ -483,64 +430,71 @@ def list_applications():
 def update_application(reference):
     require_admin()
     payload = request.get_json(silent=True) or {}
-    settings = db.settings()
-
-    status = payload.get("status")
-    payment = payload.get("payment")
-    notes = payload.get("notes")
-    if status is not None and status not in settings["statuses"]:
+    status, notes = payload.get("status"), payload.get("notes")
+    if status is not None and status not in cfg.STATUSES:
         return jsonify(ok=False, error=f"Unknown status: {status}"), 400
-    if payment is not None and payment not in settings["payments"]:
-        return jsonify(ok=False, error=f"Unknown payment status: {payment}"), 400
     if notes is not None and not isinstance(notes, str):
         return jsonify(ok=False, error="Notes must be text"), 400
-
     try:
-        db.update_application(
-            reference,
-            status=status,
-            payment=payment,
-            notes=None if notes is None else notes.strip(),
-        )
+        db.update(reference, status=status, notes=None if notes is None else notes.strip()[:5000])
     except KeyError:
         return jsonify(ok=False, error=f"Application {reference} not found"), 404
-    except ExcelWriteRefused as exc:
-        return jsonify(ok=False, error=str(exc)), 503
-    except Exception:
-        app.logger.exception("update_application failed")
-        return jsonify(ok=False, error="Internal error updating application"), 500
-    return jsonify(ok=True, reference=reference)
+    sync.nudge()
+    return jsonify(ok=True)
 
 
-@app.get("/api/stats")
-def stats():
+@app.post("/api/applications/bulk-status")
+def bulk_status():
     require_admin()
-    return jsonify(ok=True, stats=db.stats())
+    payload = request.get_json(silent=True) or {}
+    refs, status = payload.get("references") or [], payload.get("status")
+    if status not in cfg.STATUSES:
+        return jsonify(ok=False, error=f"Unknown status: {status}"), 400
+    if not isinstance(refs, list) or not refs or not all(isinstance(r, str) for r in refs):
+        return jsonify(ok=False, error="Choose at least one application"), 400
+    n = db.bulk_status(refs[:1000], status)
+    sync.nudge()
+    return jsonify(ok=True, updated=n)
+
+
+@app.delete("/api/applications/<string:reference>")
+def delete_application(reference):
+    require_admin()
+    try:
+        db.delete(reference)
+    except KeyError:
+        return jsonify(ok=False, error=f"Application {reference} not found"), 404
+    sync.nudge()
+    return jsonify(ok=True)
+
+
+@app.get("/api/sync")
+def sync_status():
+    require_admin()
+    return jsonify(ok=True, sync=sync.status(), now=time.time())
+
+
+@app.post("/api/sync")
+def sync_now():
+    require_admin()
+    if not sync.state["configured"]:
+        return jsonify(ok=False, error="The Google Sheet link isn't set up on the server yet."), 400
+    sync.resync()
+    return jsonify(ok=True)
 
 
 @app.errorhandler(401)
 def unauthorized(_error):
-    return jsonify(ok=False, error="Not authenticated"), 401
+    return jsonify(ok=False, error="Your session has ended. Please sign in again."), 401
 
 
 if __name__ == "__main__":
-    # Debug mode is opt-in and off by default. The Werkzeug debugger it enables
-    # allows anyone who can reach the error page to run code on the server, so
-    # it must never be switched on for a public deployment. Real hosting runs
-    # this file under gunicorn instead (see Procfile), which never calls
-    # app.run() and so is unaffected either way.
-    #
-    #   ./server/run.sh                    # normal local use, no debugger
-    #   FLASK_DEBUG=1 ./server/run.sh      # only when actively debugging locally
-    debug = os.environ.get("FLASK_DEBUG", "").strip().lower() in ("1", "true", "yes")
+    debug = _flag("FLASK_DEBUG")
     host = os.environ.get("HOST", "127.0.0.1")
-
-    print("Lokamania 09 server")
-    print(f"  Site:  http://{host}:{PORT}/")
-    print(f"  Admin: http://{host}:{PORT}/admin")
-    print(f"  Excel: {EXCEL_PATH}")
-    print(f"  Debug: {'ON (local only)' if debug else 'off'}")
-    if debug and host not in ("127.0.0.1", "localhost", "::1"):
-        print("  WARNING: debug is on but the server is not local-only.")
-
+    print("Lokamania 10 server")
+    print(f"  Site:     http://{host}:{PORT}/")
+    print(f"  Admin:    http://{host}:{PORT}/admin")
+    print(f"  Database: {DATABASE_PATH}")
+    print(f"  Sheet:    {'sync on' if sync.state['configured'] else 'not configured'}")
+    print(f"  Closes:   {CLOSE_AT.isoformat()}")
     app.run(host=host, port=PORT, debug=debug, use_reloader=False)

@@ -32,3 +32,14 @@ deploy/vps/
 *.swp
 *~
 *.log
+
+# Design files and mockups: not part of the website (too large to upload).
+Claude outputs/
+booth-mockups/
+
+# Lokamania 10: local database and exports
+local-data/
+*.db
+*.db-wal
+*.db-shm
+*.b64

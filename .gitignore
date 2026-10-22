@@ -32,3 +32,9 @@ server/*.log
 .vscode/
 *.swp
 *~
+# ---- Lokamania 10: local database & exports (never commit applicant data) ----
+local-data/
+*.db
+*.db-wal
+*.db-shm
+*.b64
